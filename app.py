@@ -1,204 +1,125 @@
 import streamlit as st
-import polars as pl
 import pandas as pd
+import polars as pl
 from io import BytesIO
 import zipfile
 
-# ---------- CONFIGURACION ----------
-st.set_page_config(
-    page_title="Analizador Financiero",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
-    "Sube tu archivo (Excel, CSV, ZIP o Parquet)",
-    type=["xlsx", "csv", "zip", "parquet"]
+    "Sube tu archivo (Excel, CSV o ZIP)",
+    type=["xlsx", "csv", "zip"]
 )
 
-
-# ---------- LECTURA SEGURA CSV ----------
-def leer_csv_seguro(f):
+# ---------- leer csv seguro ----------
+def leer_csv(f):
 
     try:
-        df = pl.read_csv(
-            f,
-            separator=",",
-            ignore_errors=True,
-            infer_schema_length=10000
-        )
+        return pl.read_csv(f, separator=",", infer_schema_length=1000)
     except:
-
         f.seek(0)
-
-        df = pl.read_csv(
-            f,
-            separator=";",
-            ignore_errors=True,
-            infer_schema_length=10000
-        )
-
-    return df
+        return pl.read_csv(f, separator=";", infer_schema_length=1000)
 
 
-# ---------- CARGAR ARCHIVO ----------
-def cargar_base(file):
+# ---------- cargar archivo ----------
+def cargar_archivo(file):
 
     nombre = file.name.lower()
 
-    # CSV
     if nombre.endswith(".csv"):
-        df = leer_csv_seguro(file)
+        df = leer_csv(file)
 
-    # PARQUET
-    elif nombre.endswith(".parquet"):
-        df = pl.read_parquet(file)
-
-    # ZIP
     elif nombre.endswith(".zip"):
 
         with zipfile.ZipFile(file) as z:
 
-            nombre_archivo = z.namelist()[0]
+            archivo_csv = [f for f in z.namelist() if f.endswith(".csv")][0]
 
-            with z.open(nombre_archivo) as f:
-                df = leer_csv_seguro(f)
+            with z.open(archivo_csv) as f:
 
-    # EXCEL
+                df = leer_csv(f)
+
     else:
 
-        df_pandas = pd.read_excel(file, engine="openpyxl")
+        df = pd.read_excel(file)
 
-        buffer = BytesIO()
-        df_pandas.to_csv(buffer, index=False)
-        buffer.seek(0)
-
-        df = leer_csv_seguro(buffer)
+        df = pl.from_pandas(df)
 
     return df
 
 
-# ---------- EXPORTAR EXCEL ----------
-def exportar_excel(df):
+# ---------- ejecutar ----------
+if archivo:
 
-    output = BytesIO()
+    with st.spinner("Procesando archivo..."):
 
-    df.to_pandas().to_excel(output, index=False)
+        df = cargar_archivo(archivo)
 
-    return output.getvalue()
+    st.success("Archivo cargado")
 
+    st.subheader("Resumen")
 
-# ---------- PROCESAR ARCHIVO ----------
-if archivo is not None:
-
-    with st.spinner("Cargando base..."):
-
-        try:
-            df = cargar_base(archivo)
-
-        except Exception as e:
-            st.error("Error al leer el archivo.")
-            st.exception(e)
-            st.stop()
-
-    st.success("Archivo cargado correctamente")
-
-    # ---------- RESUMEN ----------
-    st.subheader("Resumen del archivo")
-
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     col1.metric("Filas", df.height)
     col2.metric("Columnas", df.width)
-    col3.metric("Memoria (MB)", round(df.estimated_size() / 1_000_000, 2))
 
     st.divider()
 
-    # ---------- DUPLICADOS ----------
-    st.subheader("Detección de duplicados")
+    columna = st.selectbox("Selecciona columna para duplicados", df.columns)
 
-    columna_dup = st.selectbox(
-        "Selecciona la columna para detectar duplicados",
-        df.columns
-    )
+    duplicados = df.filter(pl.col(columna).is_duplicated())
 
-    duplicados = df.filter(
-        pl.col(columna_dup).is_duplicated()
-    )
-
-    st.metric("Duplicados encontrados", duplicados.height)
+    st.write("Duplicados encontrados:", duplicados.height)
 
     if duplicados.height > 0:
 
-        st.dataframe(
-            duplicados.to_pandas(),
-            use_container_width=True,
-            height=400
-        )
+        st.dataframe(duplicados.to_pandas(), height=400)
 
-    st.divider()
-
-    # ---------- DETECTAR MONEDA ----------
+    # detectar moneda
     moneda_col = None
 
     for col in df.columns:
-
-        try:
-            if df[col].cast(str).str.contains("PEN|USD").any():
-                moneda_col = col
-                break
-        except:
-            pass
-
-    pen = pl.DataFrame()
-    usd = pl.DataFrame()
+        if df[col].cast(str).str.contains("PEN|USD").any():
+            moneda_col = col
+            break
 
     if moneda_col:
 
-        pen = df.filter(
-            pl.col(moneda_col).cast(str).str.contains("PEN")
-        )
-
-        usd = df.filter(
-            pl.col(moneda_col).cast(str).str.contains("USD")
-        )
+        pen = df.filter(pl.col(moneda_col).str.contains("PEN"))
+        usd = df.filter(pl.col(moneda_col).str.contains("USD"))
 
         st.subheader("Separación por moneda")
 
         c1, c2 = st.columns(2)
 
-        c1.metric("Registros PEN", pen.height)
-        c2.metric("Registros USD", usd.height)
+        c1.metric("PEN", pen.height)
+        c2.metric("USD", usd.height)
 
-    st.divider()
+        def exportar(df):
 
-    # ---------- DESCARGAS ----------
-    st.subheader("Descargar resultados")
+            output = BytesIO()
 
-    col1, col2, col3 = st.columns(3)
+            df.to_pandas().to_excel(output, index=False)
 
-    with col1:
-        if duplicados.height > 0:
-            st.download_button(
-                "Descargar duplicados",
-                exportar_excel(duplicados),
-                "duplicados.xlsx"
-            )
+            return output.getvalue()
 
-    with col2:
-        if pen.height > 0:
-            st.download_button(
-                "Descargar SOLES",
-                exportar_excel(pen),
-                "soles.xlsx"
-            )
+        st.download_button(
+            "Descargar duplicados",
+            exportar(duplicados),
+            "duplicados.xlsx"
+        )
 
-    with col3:
-        if usd.height > 0:
-            st.download_button(
-                "Descargar DÓLARES",
-                exportar_excel(usd),
-                "dolares.xlsx"
-            )
+        st.download_button(
+            "Descargar PEN",
+            exportar(pen),
+            "pen.xlsx"
+        )
+
+        st.download_button(
+            "Descargar USD",
+            exportar(usd),
+            "usd.xlsx"
+        )
