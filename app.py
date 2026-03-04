@@ -12,50 +12,37 @@ archivo = st.file_uploader(
     type=["xlsx", "csv", "zip"]
 )
 
-# -------------------------
-# EXPORTAR EXCEL
-# -------------------------
-def exportar_excel(df):
+# ---------------------------
+# Exportar CSV (mucho más ligero)
+# ---------------------------
+def exportar_csv(df):
+    return df.to_csv(index=False).encode("utf-8")
 
-    output = BytesIO()
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
-
-    return output.getvalue()
-
-
-# -------------------------
-# LEER CSV SEGURO
-# -------------------------
+# ---------------------------
+# Leer CSV
+# ---------------------------
 def leer_csv_seguro(f):
-
     for sep in [",", ";"]:
         try:
             f.seek(0)
             return pd.read_csv(f, sep=sep, low_memory=False)
         except:
             continue
-
     raise ValueError("No se pudo leer el CSV")
 
-
-# -------------------------
-# CARGAR ARCHIVO
-# -------------------------
+# ---------------------------
+# Cargar archivo
+# ---------------------------
 @st.cache_data
 def cargar_archivo(file):
 
     nombre = file.name.lower()
 
     if nombre.endswith(".csv"):
-
         df = leer_csv_seguro(file)
 
     elif nombre.endswith(".zip"):
-
         with zipfile.ZipFile(file) as z:
-
             archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
 
             if not archivos_csv:
@@ -65,71 +52,48 @@ def cargar_archivo(file):
                 df = leer_csv_seguro(f)
 
     else:
-
         df = pd.read_excel(file)
 
     return df
 
 
-# -------------------------
-# PROCESAR ARCHIVO
-# -------------------------
+# ---------------------------
+# Procesar
+# ---------------------------
 if archivo is not None:
 
-    with st.spinner("Procesando archivo grande..."):
-
+    with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
-    # normalizar columnas
     df.columns = df.columns.str.lower().str.strip()
 
     st.success("Archivo cargado correctamente")
 
-    # -------------------------
-    # VALIDAR COLUMNAS
-    # -------------------------
-
     if "psp_tin" not in df.columns:
-
         st.error("No existe la columna psp_tin")
         st.stop()
 
     if "tx_currency_code" not in df.columns:
-
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
-    # -------------------------
-    # ELIMINAR DUPLICADOS
-    # -------------------------
-
+    # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
-    # -------------------------
-    # DASHBOARD
-    # -------------------------
-
+    # dashboard
     st.subheader("Dashboard financiero")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    col1.metric("Total registros", len(df))
-    col2.metric("Columnas", len(df.columns))
-    col3.metric("Registros sin duplicados", len(df_sin_duplicados))
+    c1.metric("Total registros", len(df))
+    c2.metric("Columnas", len(df.columns))
+    c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
     st.divider()
 
-    # -------------------------
-    # SEPARAR MONEDA
-    # -------------------------
-
-    pen = df_sin_duplicados[
-        df_sin_duplicados["tx_currency_code"] == "PEN"
-    ]
-
-    usd = df_sin_duplicados[
-        df_sin_duplicados["tx_currency_code"] == "USD"
-    ]
+    # separar monedas
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
     st.subheader("Separación por moneda")
 
@@ -140,34 +104,33 @@ if archivo is not None:
 
     st.divider()
 
-    # -------------------------
-    # DESCARGAS
-    # -------------------------
-
+    # ---------------------------
+    # Descargas seguras
+    # ---------------------------
     st.subheader("Descargar resultados")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    with col1:
-
+    with c1:
         st.download_button(
             "Descargar base sin duplicados",
-            exportar_excel(df_sin_duplicados),
-            "base_sin_duplicados.xlsx"
+            exportar_csv(df_sin_duplicados),
+            "base_sin_duplicados.csv",
+            mime="text/csv"
         )
 
-    with col2:
-
+    with c2:
         st.download_button(
             "Descargar PEN",
-            exportar_excel(pen),
-            "registros_pen.xlsx"
+            exportar_csv(pen),
+            "registros_pen.csv",
+            mime="text/csv"
         )
 
-    with col3:
-
+    with c3:
         st.download_button(
             "Descargar USD",
-            exportar_excel(usd),
-            "registros_usd.xlsx"
+            exportar_csv(usd),
+            "registros_usd.csv",
+            mime="text/csv"
         )
