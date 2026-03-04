@@ -6,11 +6,24 @@ st.title("Detector de Duplicados y Separador por Moneda")
 
 archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
 
+@st.cache_data
+def cargar_excel(archivo):
+    df = pd.read_excel(archivo, engine="openpyxl")
+    return df
+
 if archivo is not None:
 
-    df = pd.read_excel(archivo)
+    with st.spinner("Procesando archivo grande..."):
+        df = cargar_excel(archivo)
 
-    duplicados = df[df.duplicated(keep=False)]
+    st.success("Archivo cargado correctamente")
+
+    columna = st.selectbox(
+        "Selecciona la columna para detectar duplicados",
+        df.columns
+    )
+
+    duplicados = df[df.duplicated(subset=[columna], keep=False)]
 
     st.subheader("Registros duplicados encontrados")
 
@@ -19,13 +32,6 @@ if archivo is not None:
         st.warning(f"Se encontraron {len(duplicados)} registros duplicados")
     else:
         st.success("No se encontraron duplicados")
-
-    if "Moneda" in df.columns:
-        soles = df[df["Moneda"] == "PEN"]
-        dolares = df[df["Moneda"] == "USD"]
-    else:
-        soles = pd.DataFrame()
-        dolares = pd.DataFrame()
 
     def convertir_excel(dataframe):
         output = BytesIO()
@@ -36,27 +42,13 @@ if archivo is not None:
     st.subheader("Descargar archivos")
 
     st.download_button(
-        "Descargar Excel completo",
-        convertir_excel(df),
-        "archivo_completo.xlsx"
+        label="Descargar Excel completo",
+        data=convertir_excel(df),
+        file_name="archivo_completo.xlsx"
     )
 
     st.download_button(
-        "Descargar duplicados",
-        convertir_excel(duplicados),
-        "duplicados.xlsx"
+        label="Descargar duplicados",
+        data=convertir_excel(duplicados),
+        file_name="duplicados.xlsx"
     )
-
-    if not soles.empty:
-        st.download_button(
-            "Descargar Soles",
-            convertir_excel(soles),
-            "soles.xlsx"
-        )
-
-    if not dolares.empty:
-        st.download_button(
-            "Descargar Dólares",
-            convertir_excel(dolares),
-            "dolares.xlsx"
-        )
