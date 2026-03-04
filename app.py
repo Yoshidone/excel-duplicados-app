@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
@@ -7,28 +8,43 @@ st.set_page_config(page_title="Analizador Financiero", layout="wide")
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
-    "Sube tu archivo Excel o CSV",
-    type=["xlsx", "csv"]
+    "Sube tu archivo Excel, CSV o ZIP",
+    type=["xlsx", "csv", "zip"]
 )
 
-# -------- EXPORTAR EXCEL --------
+# ---------- EXPORTAR ----------
 def exportar_excel(df):
     output = BytesIO()
     df.to_excel(output, index=False)
     return output.getvalue()
 
-# -------- CARGA OPTIMIZADA --------
+# ---------- CARGAR ARCHIVO ----------
 @st.cache_data
 def cargar_archivo(file):
 
+    # CSV
     if file.name.endswith(".csv"):
         df = pd.read_csv(file, low_memory=False)
+
+    # ZIP con CSV
+    elif file.name.endswith(".zip"):
+
+        with zipfile.ZipFile(file) as z:
+
+            nombre = z.namelist()[0]
+
+            with z.open(nombre) as f:
+
+                df = pd.read_csv(f, low_memory=False)
+
+    # Excel
     else:
         df = pd.read_excel(file)
 
     return df
 
 
+# ---------- PROCESAR ----------
 if archivo is not None:
 
     with st.spinner("Procesando archivo grande..."):
@@ -36,14 +52,14 @@ if archivo is not None:
         try:
             df = cargar_archivo(archivo)
         except:
-            st.error("Error leyendo archivo")
+            st.error("Error leyendo el archivo")
             st.stop()
 
     st.success("Archivo cargado correctamente")
 
-    # ==============================
-    # DASHBOARD FINANCIERO
-    # ==============================
+    # ======================
+    # DASHBOARD
+    # ======================
 
     st.subheader("Dashboard financiero")
 
@@ -57,10 +73,11 @@ if archivo is not None:
     col2.metric("Columnas", total_columnas)
     col3.metric("Duplicados", duplicados_total)
 
-    # detectar columna moneda
+    # detectar moneda
     moneda_col = None
 
     for col in df.columns:
+
         if df[col].astype(str).str.contains("PEN|USD", na=False).any():
             moneda_col = col
             break
@@ -74,9 +91,9 @@ if archivo is not None:
 
     st.divider()
 
-    # ==============================
+    # ======================
     # BUSCADOR
-    # ==============================
+    # ======================
 
     st.subheader("Buscar registro")
 
@@ -94,9 +111,9 @@ if archivo is not None:
 
     st.divider()
 
-    # ==============================
-    # DETECCIÓN DE DUPLICADOS
-    # ==============================
+    # ======================
+    # DUPLICADOS
+    # ======================
 
     st.subheader("Detección de duplicados")
 
@@ -114,9 +131,9 @@ if archivo is not None:
 
     st.divider()
 
-    # ==============================
-    # SEPARACIÓN POR MONEDA
-    # ==============================
+    # ======================
+    # MONEDA
+    # ======================
 
     if moneda_col:
 
@@ -127,10 +144,11 @@ if archivo is not None:
         c1.metric("Registros PEN", len(pen))
         c2.metric("Registros USD", len(usd))
 
-        # detectar columna monto automáticamente
+        # detectar columna monto
         monto_col = None
 
         for col in df.columns:
+
             if "monto" in col.lower() or "amount" in col.lower():
                 monto_col = col
                 break
@@ -145,9 +163,9 @@ if archivo is not None:
 
         st.divider()
 
-        # ==============================
+        # ======================
         # DESCARGAS
-        # ==============================
+        # ======================
 
         st.subheader("Descargar resultados")
 
