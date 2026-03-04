@@ -4,7 +4,12 @@ import pandas as pd
 from io import BytesIO
 import zipfile
 
-st.set_page_config(page_title="Analizador Financiero", layout="wide")
+# ---------- CONFIGURACION ----------
+st.set_page_config(
+    page_title="Analizador Financiero",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 st.title("Analizador Financiero de Bases")
 
@@ -14,7 +19,7 @@ archivo = st.file_uploader(
 )
 
 
-# -------- FUNCION PARA LEER CSV SEGURO --------
+# ---------- LECTURA SEGURA CSV ----------
 def leer_csv_seguro(f):
 
     try:
@@ -25,6 +30,7 @@ def leer_csv_seguro(f):
             infer_schema_length=10000
         )
     except:
+
         f.seek(0)
 
         df = pl.read_csv(
@@ -37,23 +43,20 @@ def leer_csv_seguro(f):
     return df
 
 
-# -------- CARGA DE ARCHIVO --------
-@st.cache_data
+# ---------- CARGAR ARCHIVO ----------
 def cargar_base(file):
 
     nombre = file.name.lower()
 
-    # -------- CSV --------
+    # CSV
     if nombre.endswith(".csv"):
-
         df = leer_csv_seguro(file)
 
-    # -------- PARQUET --------
+    # PARQUET
     elif nombre.endswith(".parquet"):
-
         df = pl.read_parquet(file)
 
-    # -------- ZIP --------
+    # ZIP
     elif nombre.endswith(".zip"):
 
         with zipfile.ZipFile(file) as z:
@@ -61,10 +64,9 @@ def cargar_base(file):
             nombre_archivo = z.namelist()[0]
 
             with z.open(nombre_archivo) as f:
-
                 df = leer_csv_seguro(f)
 
-    # -------- EXCEL --------
+    # EXCEL
     else:
 
         df_pandas = pd.read_excel(file, engine="openpyxl")
@@ -78,7 +80,7 @@ def cargar_base(file):
     return df
 
 
-# -------- EXPORTAR --------
+# ---------- EXPORTAR EXCEL ----------
 def exportar_excel(df):
 
     output = BytesIO()
@@ -88,29 +90,37 @@ def exportar_excel(df):
     return output.getvalue()
 
 
+# ---------- PROCESAR ARCHIVO ----------
 if archivo is not None:
 
     with st.spinner("Cargando base..."):
-        df = cargar_base(archivo)
+
+        try:
+            df = cargar_base(archivo)
+
+        except Exception as e:
+            st.error("Error al leer el archivo.")
+            st.exception(e)
+            st.stop()
 
     st.success("Archivo cargado correctamente")
 
-    # -------- RESUMEN --------
+    # ---------- RESUMEN ----------
     st.subheader("Resumen del archivo")
 
-    c1, c2, c3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    c1.metric("Filas", df.height)
-    c2.metric("Columnas", df.width)
-    c3.metric("Memoria MB", round(df.estimated_size() / 1000000, 2))
+    col1.metric("Filas", df.height)
+    col2.metric("Columnas", df.width)
+    col3.metric("Memoria (MB)", round(df.estimated_size() / 1_000_000, 2))
 
     st.divider()
 
-    # -------- DUPLICADOS --------
+    # ---------- DUPLICADOS ----------
     st.subheader("Detección de duplicados")
 
     columna_dup = st.selectbox(
-        "Selecciona la columna para buscar duplicados",
+        "Selecciona la columna para detectar duplicados",
         df.columns
     )
 
@@ -130,7 +140,7 @@ if archivo is not None:
 
     st.divider()
 
-    # -------- DETECTAR MONEDA --------
+    # ---------- DETECTAR MONEDA ----------
     moneda_col = None
 
     for col in df.columns:
@@ -164,7 +174,7 @@ if archivo is not None:
 
     st.divider()
 
-    # -------- DESCARGAS --------
+    # ---------- DESCARGAS ----------
     st.subheader("Descargar resultados")
 
     col1, col2, col3 = st.columns(3)
