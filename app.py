@@ -1,126 +1,135 @@
 import streamlit as st
+import polars as pl
 import pandas as pd
 from io import BytesIO
 
-st.set_page_config(page_title="Detector de Duplicados", layout="wide")
+st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
-st.title("Detector de Duplicados y Separador por Moneda")
+st.title("Analizador Financiero de Bases")
 
-archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
+archivo = st.file_uploader("Sube tu Excel", type=["xlsx"])
 
 
-# -------- CARGA OPTIMIZADA --------
+# -------- CARGA RAPIDA --------
 @st.cache_data
 def cargar_excel(file):
+
     df = pd.read_excel(file, engine="openpyxl")
+
+    df = pl.from_pandas(df)
+
     return df
 
 
-# -------- CONVERTIR PARA DESCARGA --------
-def convertir_excel(df):
+# -------- EXPORTAR --------
+def exportar_excel(df):
+
     output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
+
+    df.to_pandas().to_excel(output, index=False)
+
     return output.getvalue()
 
 
 if archivo is not None:
 
-    with st.spinner("Procesando archivo..."):
+    with st.spinner("Cargando base..."):
         df = cargar_excel(archivo)
 
-    st.success("Archivo cargado correctamente")
+    st.success("Archivo cargado")
 
-    # -------- INFO GENERAL --------
-    st.subheader("Resumen del archivo")
+    # -------- INFO BASE --------
+    st.subheader("Resumen")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    col1.metric("Filas totales", len(df))
-    col2.metric("Columnas", len(df.columns))
-    col3.metric("Memoria aprox (MB)", round(df.memory_usage().sum()/1000000,2))
+    c1.metric("Filas", df.height)
+    c2.metric("Columnas", df.width)
+    c3.metric("Memoria MB", round(df.estimated_size()/1000000,2))
 
+    st.divider()
 
-    # -------- SELECCIONAR COLUMNA DUPLICADOS --------
-    st.subheader("Detección de duplicados")
+    # -------- DUPLICADOS --------
+    st.subheader("Duplicados")
 
     columna_dup = st.selectbox(
-        "Selecciona la columna para buscar duplicados",
+        "Selecciona columna para detectar duplicados",
         df.columns
     )
 
-    duplicados = df[df.duplicated(subset=[columna_dup], keep=False)]
+    duplicados = df.filter(
+        pl.col(columna_dup).is_duplicated()
+    )
 
-    if not duplicados.empty:
+    st.metric("Duplicados encontrados", duplicados.height)
 
-        st.warning(f"{len(duplicados)} registros duplicados encontrados")
+    if duplicados.height > 0:
 
         st.dataframe(
-            duplicados,
+            duplicados.to_pandas(),
             use_container_width=True,
             height=400
         )
 
-    else:
-        st.success("No se encontraron duplicados")
-
+    st.divider()
 
     # -------- DETECTAR MONEDA --------
     moneda_col = None
 
     for col in df.columns:
 
-        valores = df[col].astype(str).str.upper()
-
-        if valores.str.contains("PEN|USD", na=False).any():
+        if df[col].cast(str).str.contains("PEN|USD").any():
             moneda_col = col
             break
 
 
-    pen = pd.DataFrame()
-    usd = pd.DataFrame()
+    pen = pl.DataFrame()
+    usd = pl.DataFrame()
 
     if moneda_col:
 
-        pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
-        usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
+        pen = df.filter(
+            pl.col(moneda_col).cast(str).str.contains("PEN")
+        )
+
+        usd = df.filter(
+            pl.col(moneda_col).cast(str).str.contains("USD")
+        )
 
         st.subheader("Separación por moneda")
 
         c1, c2 = st.columns(2)
 
-        c1.metric("Registros PEN", len(pen))
-        c2.metric("Registros USD", len(usd))
+        c1.metric("Registros PEN", pen.height)
+        c2.metric("Registros USD", usd.height)
 
-    else:
-        st.warning("No se detectó columna de moneda automáticamente")
-
+    st.divider()
 
     # -------- DESCARGAS --------
-    st.subheader("Descargar resultados")
+    st.subheader("Descargar archivos")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if not duplicados.empty:
+        if duplicados.height > 0:
             st.download_button(
                 "Descargar duplicados",
-                convertir_excel(duplicados),
+                exportar_excel(duplicados),
                 "duplicados.xlsx"
             )
 
     with col2:
-        if not pen.empty:
+        if pen.height > 0:
             st.download_button(
-                "Descargar PEN",
-                convertir_excel(pen),
-                "pen.xlsx"
+                "Descargar SOLES",
+                exportar_excel(pen),
+                "soles.xlsx"
             )
 
     with col3:
-        if not usd.empty:
+        if usd.height > 0:
             st.download_button(
-                "Descargar USD",
-                convertir_excel(usd),
-                "usd.xlsx"
+                "Descargar DÓLARES",
+                exportar_excel(usd),
+                "dolares.xlsx"
             )
