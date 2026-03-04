@@ -12,9 +12,9 @@ archivo = st.file_uploader(
     type=["xlsx", "csv", "zip"]
 )
 
-# -------------------------
+# -----------------------------
 # EXPORTAR EXCEL
-# -------------------------
+# -----------------------------
 def exportar_excel(df):
 
     output = BytesIO()
@@ -24,9 +24,10 @@ def exportar_excel(df):
 
     return output.getvalue()
 
-# -------------------------
-# LEER CSV
-# -------------------------
+
+# -----------------------------
+# LEER CSV SEGURO
+# -----------------------------
 def leer_csv_seguro(f):
 
     for sep in [",", ";"]:
@@ -38,9 +39,10 @@ def leer_csv_seguro(f):
 
     raise ValueError("No se pudo leer el CSV")
 
-# -------------------------
+
+# -----------------------------
 # CARGAR ARCHIVO
-# -------------------------
+# -----------------------------
 @st.cache_data
 def cargar_archivo(file):
 
@@ -60,7 +62,6 @@ def cargar_archivo(file):
                 raise ValueError("El ZIP no contiene CSV")
 
             with z.open(archivos_csv[0]) as f:
-
                 df = leer_csv_seguro(f)
 
     else:
@@ -69,31 +70,39 @@ def cargar_archivo(file):
 
     return df
 
-# -------------------------
+
+# -----------------------------
 # PROCESAR ARCHIVO
-# -------------------------
+# -----------------------------
 if archivo is not None:
 
     with st.spinner("Procesando archivo grande..."):
 
         df = cargar_archivo(archivo)
 
+    # NORMALIZAR COLUMNAS
+    df.columns = df.columns.str.lower().str.strip()
+
     st.success("Archivo cargado correctamente")
 
-    # -------------------------
-    # ELIMINAR DUPLICADOS
-    # -------------------------
+    # -----------------------------
+    # VALIDAR COLUMNA
+    # -----------------------------
 
-    if "PSP_TIN" not in df.columns:
+    if "psp_tin" not in df.columns:
 
-        st.error("No existe la columna PSP_TIN")
+        st.error("No existe la columna psp_tin")
         st.stop()
 
-    df_sin_duplicados = df.drop_duplicates(subset="PSP_TIN")
+    # -----------------------------
+    # ELIMINAR DUPLICADOS
+    # -----------------------------
 
-    # -------------------------
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
+
+    # -----------------------------
     # DASHBOARD
-    # -------------------------
+    # -----------------------------
 
     st.subheader("Dashboard financiero")
 
@@ -105,16 +114,15 @@ if archivo is not None:
 
     st.divider()
 
-    # -------------------------
+    # -----------------------------
     # DETECTAR MONEDA
-    # -------------------------
+    # -----------------------------
 
     moneda_col = None
 
     for col in df.columns:
 
         if df[col].astype(str).str.contains("PEN|USD", na=False).any():
-
             moneda_col = col
             break
 
@@ -123,9 +131,9 @@ if archivo is not None:
         st.error("No se encontró columna de moneda")
         st.stop()
 
-    # -------------------------
+    # -----------------------------
     # SEPARAR PEN Y USD
-    # -------------------------
+    # -----------------------------
 
     pen = df_sin_duplicados[
         df_sin_duplicados[moneda_col].astype(str).str.contains("PEN", na=False)
@@ -144,34 +152,34 @@ if archivo is not None:
 
     st.divider()
 
-    # -------------------------
+    # -----------------------------
     # DESCARGAS
-    # -------------------------
+    # -----------------------------
 
     st.subheader("Descargar resultados")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("Preparar base limpia"):
-            st.download_button(
-                "Descargar base limpia",
-                exportar_excel(df_sin_duplicados),
-                "base_limpia.xlsx"
-            )
+
+        st.download_button(
+            "Descargar base sin duplicados",
+            exportar_excel(df_sin_duplicados),
+            "base_sin_duplicados.xlsx"
+        )
 
     with col2:
-        if st.button("Preparar PEN"):
-            st.download_button(
-                "Descargar PEN",
-                exportar_excel(pen),
-                "pen.xlsx"
-            )
+
+        st.download_button(
+            "Descargar PEN",
+            exportar_excel(pen),
+            "registros_pen.xlsx"
+        )
 
     with col3:
-        if st.button("Preparar USD"):
-            st.download_button(
-                "Descargar USD",
-                exportar_excel(usd),
-                "usd.xlsx"
-            )
+
+        st.download_button(
+            "Descargar USD",
+            exportar_excel(usd),
+            "registros_usd.xlsx"
+        )
