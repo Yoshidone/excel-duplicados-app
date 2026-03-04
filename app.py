@@ -18,7 +18,6 @@ archivo = st.file_uploader(
 def exportar_excel(df):
 
     output = BytesIO()
-
     df.to_excel(output, index=False)
 
     return output.getvalue()
@@ -90,7 +89,6 @@ if archivo is not None:
     if "invoice_public_id" not in df.columns:
 
         st.error("No existe la columna invoice_public_id")
-
         st.stop()
 
     df_sin_duplicados = df.drop_duplicates(subset="invoice_public_id")
@@ -120,13 +118,11 @@ if archivo is not None:
         if df[col].astype(str).str.contains("PEN|USD", na=False).any():
 
             moneda_col = col
-
             break
 
     if moneda_col is None:
 
         st.error("No se encontró columna de moneda")
-
         st.stop()
 
     # -------------------------
@@ -147,28 +143,6 @@ if archivo is not None:
 
     c1.metric("Registros PEN", len(pen))
     c2.metric("Registros USD", len(usd))
-
-    st.divider()
-
-    # -------------------------
-    # BUSCADOR
-    # -------------------------
-
-    st.subheader("Buscar registro")
-
-    buscar = st.text_input("Buscar cliente, RUC o texto")
-
-    if buscar:
-
-        resultado = df_sin_duplicados[
-            df_sin_duplicados.astype(str)
-            .apply(lambda x: x.str.contains(buscar, case=False))
-            .any(axis=1)
-        ]
-
-        st.write("Resultados encontrados:", len(resultado))
-
-        st.dataframe(resultado.head(1000))
 
     st.divider()
 
