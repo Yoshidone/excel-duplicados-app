@@ -4,6 +4,7 @@ import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
+
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
@@ -11,186 +12,194 @@ archivo = st.file_uploader(
     type=["xlsx", "csv", "zip"]
 )
 
-# ---------- EXPORTAR ----------
+# -------------------------
+# EXPORTAR EXCEL
+# -------------------------
 def exportar_excel(df):
+
     output = BytesIO()
+
     df.to_excel(output, index=False)
+
     return output.getvalue()
 
-# ---------- LEER CSV ROBUSTO ----------
+
+# -------------------------
+# LEER CSV SEGURO
+# -------------------------
 def leer_csv_seguro(f):
-    # probar separadores y encodings comunes
+
     for sep in [",", ";"]:
-        for enc in ["utf-8", "latin-1"]:
-            try:
-                f.seek(0)
-                return pd.read_csv(f, sep=sep, encoding=enc, low_memory=False)
-            except Exception:
-                continue
+
+        try:
+            f.seek(0)
+            return pd.read_csv(f, sep=sep, low_memory=False)
+        except:
+            continue
+
     raise ValueError("No se pudo leer el CSV")
 
-# ---------- CARGAR ARCHIVO ----------
+
+# -------------------------
+# CARGAR ARCHIVO
+# -------------------------
 @st.cache_data
 def cargar_archivo(file):
 
     nombre = file.name.lower()
 
     if nombre.endswith(".csv"):
+
         df = leer_csv_seguro(file)
 
     elif nombre.endswith(".zip"):
 
         with zipfile.ZipFile(file) as z:
 
-            # buscar csv dentro del zip
-            archivos_csv = [n for n in z.namelist() if n.lower().endswith(".csv")]
+            archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
 
             if not archivos_csv:
-                raise ValueError("El ZIP no contiene un CSV")
+                raise ValueError("El ZIP no contiene CSV")
 
             with z.open(archivos_csv[0]) as f:
+
                 df = leer_csv_seguro(f)
 
     else:
+
         df = pd.read_excel(file)
 
     return df
 
 
-# ---------- PROCESAR ----------
+# -------------------------
+# PROCESAR ARCHIVO
+# -------------------------
 if archivo is not None:
 
     with st.spinner("Procesando archivo grande..."):
 
-        try:
-            df = cargar_archivo(archivo)
-        except Exception as e:
-            st.error(f"Error leyendo el archivo: {e}")
-            st.stop()
+        df = cargar_archivo(archivo)
 
     st.success("Archivo cargado correctamente")
 
-    # ======================
+    # -------------------------
+    # ELIMINAR DUPLICADOS
+    # -------------------------
+
+    if "invoice_public_id" not in df.columns:
+
+        st.error("No existe la columna invoice_public_id")
+
+        st.stop()
+
+    df_sin_duplicados = df.drop_duplicates(subset="invoice_public_id")
+
+    # -------------------------
     # DASHBOARD
-    # ======================
+    # -------------------------
+
     st.subheader("Dashboard financiero")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
-    total_registros = len(df)
-    total_columnas = len(df.columns)
-    duplicados_total = df.duplicated().sum()
+    col1.metric("Total registros", len(df))
+    col2.metric("Columnas", len(df.columns))
+    col3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
-    col1.metric("Total registros", total_registros)
-    col2.metric("Columnas", total_columnas)
-    col3.metric("Duplicados", duplicados_total)
+    st.divider()
+
+    # -------------------------
+    # DETECTAR MONEDA
+    # -------------------------
 
     moneda_col = None
 
     for col in df.columns:
+
         if df[col].astype(str).str.contains("PEN|USD", na=False).any():
+
             moneda_col = col
+
             break
 
-    if moneda_col:
-        pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
-        col4.metric("Registros PEN", len(pen))
+    if moneda_col is None:
+
+        st.error("No se encontró columna de moneda")
+
+        st.stop()
+
+    # -------------------------
+    # SEPARAR PEN Y USD
+    # -------------------------
+
+    pen = df_sin_duplicados[
+        df_sin_duplicados[moneda_col].astype(str).str.contains("PEN", na=False)
+    ]
+
+    usd = df_sin_duplicados[
+        df_sin_duplicados[moneda_col].astype(str).str.contains("USD", na=False)
+    ]
+
+    st.subheader("Separación por moneda")
+
+    c1, c2 = st.columns(2)
+
+    c1.metric("Registros PEN", len(pen))
+    c2.metric("Registros USD", len(usd))
 
     st.divider()
 
-    # ======================
+    # -------------------------
     # BUSCADOR
-    # ======================
+    # -------------------------
+
     st.subheader("Buscar registro")
 
     buscar = st.text_input("Buscar cliente, RUC o texto")
 
     if buscar:
 
-        resultado = df[df.astype(str).apply(
-            lambda x: x.str.contains(buscar, case=False)
-        ).any(axis=1)]
+        resultado = df_sin_duplicados[
+            df_sin_duplicados.astype(str)
+            .apply(lambda x: x.str.contains(buscar, case=False))
+            .any(axis=1)
+        ]
 
         st.write("Resultados encontrados:", len(resultado))
-        st.dataframe(resultado)
+
+        st.dataframe(resultado.head(1000))
 
     st.divider()
 
-    # ======================
-    # DUPLICADOS
-    # ======================
-    st.subheader("Detección de duplicados")
+    # -------------------------
+    # DESCARGAS
+    # -------------------------
 
-    columna = st.selectbox(
-        "Selecciona columna para revisar duplicados",
-        df.columns
-    )
+    st.subheader("Descargar resultados")
 
-    duplicados = df[df.duplicated(columna, keep=False)]
+    col1, col2, col3 = st.columns(3)
 
-    st.write("Duplicados encontrados:", len(duplicados))
+    with col1:
 
-    if len(duplicados) > 0:
-        st.dataframe(duplicados)
+        st.download_button(
+            "Descargar base sin duplicados",
+            exportar_excel(df_sin_duplicados),
+            "base_limpia.xlsx"
+        )
 
-    st.divider()
+    with col2:
 
-    # ======================
-    # MONEDA
-    # ======================
-    if moneda_col:
+        st.download_button(
+            "Descargar PEN",
+            exportar_excel(pen),
+            "pen.xlsx"
+        )
 
-        usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
-        pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
+    with col3:
 
-        st.subheader("Separación por moneda")
-
-        c1, c2 = st.columns(2)
-
-        c1.metric("Registros PEN", len(pen))
-        c2.metric("Registros USD", len(usd))
-
-        monto_col = None
-
-        for col in df.columns:
-            if "monto" in col.lower() or "amount" in col.lower():
-                monto_col = col
-                break
-
-        if monto_col:
-
-            total_pen = pen[monto_col].sum()
-            total_usd = usd[monto_col].sum()
-
-            c1.metric("Total PEN", total_pen)
-            c2.metric("Total USD", total_usd)
-
-        st.divider()
-
-        # ======================
-        # DESCARGAS
-        # ======================
-        st.subheader("Descargar resultados")
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.download_button(
-                "Descargar duplicados",
-                exportar_excel(duplicados),
-                "duplicados.xlsx"
-            )
-
-        with col2:
-            st.download_button(
-                "Descargar PEN",
-                exportar_excel(pen),
-                "pen.xlsx"
-            )
-
-        with col3:
-            st.download_button(
-                "Descargar USD",
-                exportar_excel(usd),
-                "usd.xlsx"
-            )
+        st.download_button(
+            "Descargar USD",
+            exportar_excel(usd),
+            "usd.xlsx"
+        )
