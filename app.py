@@ -11,49 +11,53 @@ archivo = st.file_uploader(
     type=["xlsx", "csv"]
 )
 
+# -------- EXPORTAR EXCEL --------
 def exportar_excel(df):
     output = BytesIO()
     df.to_excel(output, index=False)
     return output.getvalue()
 
+# -------- CARGA OPTIMIZADA --------
+@st.cache_data
+def cargar_archivo(file):
+
+    if file.name.endswith(".csv"):
+        df = pd.read_csv(file, low_memory=False)
+    else:
+        df = pd.read_excel(file)
+
+    return df
+
+
 if archivo is not None:
 
-    try:
+    with st.spinner("Procesando archivo grande..."):
 
-        if archivo.name.endswith(".csv"):
-            df = pd.read_csv(archivo)
-        else:
-            df = pd.read_excel(archivo)
+        try:
+            df = cargar_archivo(archivo)
+        except:
+            st.error("Error leyendo archivo")
+            st.stop()
 
-        st.success("Archivo cargado correctamente")
+    st.success("Archivo cargado correctamente")
 
-    except Exception:
-        st.error("No se pudo leer el archivo")
-        st.stop()
+    # ==============================
+    # DASHBOARD FINANCIERO
+    # ==============================
 
-    st.subheader("Resumen")
+    st.subheader("Dashboard financiero")
 
-    c1, c2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
 
-    c1.metric("Filas", len(df))
-    c2.metric("Columnas", len(df.columns))
+    total_registros = len(df)
+    total_columnas = len(df.columns)
+    duplicados_total = df.duplicated().sum()
 
-    st.divider()
+    col1.metric("Total registros", total_registros)
+    col2.metric("Columnas", total_columnas)
+    col3.metric("Duplicados", duplicados_total)
 
-    columna = st.selectbox(
-        "Selecciona columna para detectar duplicados",
-        df.columns
-    )
-
-    duplicados = df[df.duplicated(columna, keep=False)]
-
-    st.write("Duplicados encontrados:", len(duplicados))
-
-    if len(duplicados) > 0:
-        st.dataframe(duplicados)
-
-    st.divider()
-
+    # detectar columna moneda
     moneda_col = None
 
     for col in df.columns:
@@ -66,27 +70,106 @@ if archivo is not None:
         pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
         usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
 
+        col4.metric("Registros PEN", len(pen))
+
+    st.divider()
+
+    # ==============================
+    # BUSCADOR
+    # ==============================
+
+    st.subheader("Buscar registro")
+
+    buscar = st.text_input("Buscar cliente, RUC o texto")
+
+    if buscar:
+
+        resultado = df[df.astype(str).apply(
+            lambda x: x.str.contains(buscar, case=False)
+        ).any(axis=1)]
+
+        st.write("Resultados encontrados:", len(resultado))
+
+        st.dataframe(resultado)
+
+    st.divider()
+
+    # ==============================
+    # DETECCIÓN DE DUPLICADOS
+    # ==============================
+
+    st.subheader("Detección de duplicados")
+
+    columna = st.selectbox(
+        "Selecciona columna para revisar duplicados",
+        df.columns
+    )
+
+    duplicados = df[df.duplicated(columna, keep=False)]
+
+    st.write("Duplicados encontrados:", len(duplicados))
+
+    if len(duplicados) > 0:
+        st.dataframe(duplicados)
+
+    st.divider()
+
+    # ==============================
+    # SEPARACIÓN POR MONEDA
+    # ==============================
+
+    if moneda_col:
+
         st.subheader("Separación por moneda")
 
         c1, c2 = st.columns(2)
 
-        c1.metric("PEN", len(pen))
-        c2.metric("USD", len(usd))
+        c1.metric("Registros PEN", len(pen))
+        c2.metric("Registros USD", len(usd))
 
-        st.download_button(
-            "Descargar duplicados",
-            exportar_excel(duplicados),
-            "duplicados.xlsx"
-        )
+        # detectar columna monto automáticamente
+        monto_col = None
 
-        st.download_button(
-            "Descargar PEN",
-            exportar_excel(pen),
-            "pen.xlsx"
-        )
+        for col in df.columns:
+            if "monto" in col.lower() or "amount" in col.lower():
+                monto_col = col
+                break
 
-        st.download_button(
-            "Descargar USD",
-            exportar_excel(usd),
-            "usd.xlsx"
-        )
+        if monto_col:
+
+            total_pen = pen[monto_col].sum()
+            total_usd = usd[monto_col].sum()
+
+            c1.metric("Total PEN", total_pen)
+            c2.metric("Total USD", total_usd)
+
+        st.divider()
+
+        # ==============================
+        # DESCARGAS
+        # ==============================
+
+        st.subheader("Descargar resultados")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.download_button(
+                "Descargar duplicados",
+                exportar_excel(duplicados),
+                "duplicados.xlsx"
+            )
+
+        with col2:
+            st.download_button(
+                "Descargar PEN",
+                exportar_excel(pen),
+                "pen.xlsx"
+            )
+
+        with col3:
+            st.download_button(
+                "Descargar USD",
+                exportar_excel(usd),
+                "usd.xlsx"
+            )
