@@ -18,18 +18,18 @@ archivo = st.file_uploader(
 def exportar_excel(df):
 
     output = BytesIO()
-    df.to_excel(output, index=False)
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
 
     return output.getvalue()
 
-
 # -------------------------
-# LEER CSV SEGURO
+# LEER CSV
 # -------------------------
 def leer_csv_seguro(f):
 
     for sep in [",", ";"]:
-
         try:
             f.seek(0)
             return pd.read_csv(f, sep=sep, low_memory=False)
@@ -37,7 +37,6 @@ def leer_csv_seguro(f):
             continue
 
     raise ValueError("No se pudo leer el CSV")
-
 
 # -------------------------
 # CARGAR ARCHIVO
@@ -126,7 +125,7 @@ if archivo is not None:
         st.stop()
 
     # -------------------------
-    # SEPARAR PEN Y USD
+    # SEPARAR PEN USD
     # -------------------------
 
     pen = df_sin_duplicados[
@@ -155,25 +154,25 @@ if archivo is not None:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-
-        st.download_button(
-            "Descargar base sin duplicados",
-            exportar_excel(df_sin_duplicados),
-            "base_limpia.xlsx"
-        )
+        if st.button("Preparar base limpia"):
+            st.download_button(
+                "Descargar base limpia",
+                exportar_excel(df_sin_duplicados),
+                "base_limpia.xlsx"
+            )
 
     with col2:
-
-        st.download_button(
-            "Descargar PEN",
-            exportar_excel(pen),
-            "pen.xlsx"
-        )
+        if st.button("Preparar PEN"):
+            st.download_button(
+                "Descargar PEN",
+                exportar_excel(pen),
+                "pen.xlsx"
+            )
 
     with col3:
-
-        st.download_button(
-            "Descargar USD",
-            exportar_excel(usd),
-            "usd.xlsx"
-        )
+        if st.button("Preparar USD"):
+            st.download_button(
+                "Descargar USD",
+                exportar_excel(usd),
+                "usd.xlsx"
+            )
