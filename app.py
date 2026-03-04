@@ -2,32 +2,48 @@ import streamlit as st
 import polars as pl
 import pandas as pd
 from io import BytesIO
+import zipfile
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
-    "Sube tu archivo Excel o CSV",
-    type=["xlsx", "csv"]
+    "Sube tu archivo (Excel, CSV, ZIP o Parquet)",
+    type=["xlsx", "csv", "zip", "parquet"]
 )
 
 
-# -------- CARGA RAPIDA --------
+# -------- CARGA DE ARCHIVOS --------
 @st.cache_data
 def cargar_base(file):
 
     nombre = file.name.lower()
 
-    # si es csv (MUY rápido)
+    # -------- CSV --------
     if nombre.endswith(".csv"):
         df = pl.read_csv(file)
 
-    # si es excel
+    # -------- PARQUET (ULTRA RAPIDO) --------
+    elif nombre.endswith(".parquet"):
+        df = pl.read_parquet(file)
+
+    # -------- ZIP (CSV comprimido) --------
+    elif nombre.endswith(".zip"):
+
+        with zipfile.ZipFile(file) as z:
+
+            nombre_archivo = z.namelist()[0]
+
+            with z.open(nombre_archivo) as f:
+
+                df = pl.read_csv(f)
+
+    # -------- EXCEL --------
     else:
+
         df_pandas = pd.read_excel(file, engine="openpyxl")
 
-        # convertir a csv en memoria
         buffer = BytesIO()
         df_pandas.to_csv(buffer, index=False)
         buffer.seek(0)
@@ -37,7 +53,7 @@ def cargar_base(file):
     return df
 
 
-# -------- EXPORTAR EXCEL --------
+# -------- EXPORTAR --------
 def exportar_excel(df):
 
     output = BytesIO()
@@ -52,10 +68,10 @@ if archivo is not None:
     with st.spinner("Cargando base..."):
         df = cargar_base(archivo)
 
-    st.success("Archivo cargado correctamente")
+    st.success("Archivo cargado")
 
     # -------- RESUMEN --------
-    st.subheader("Resumen del archivo")
+    st.subheader("Resumen")
 
     c1, c2, c3 = st.columns(3)
 
@@ -69,7 +85,7 @@ if archivo is not None:
     st.subheader("Detección de duplicados")
 
     columna_dup = st.selectbox(
-        "Selecciona la columna para buscar duplicados",
+        "Selecciona columna",
         df.columns
     )
 
