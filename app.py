@@ -80,7 +80,9 @@ if archivo is not None:
     # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
-    # dashboard
+    # ---------------------------
+    # Dashboard general
+    # ---------------------------
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -91,16 +93,26 @@ if archivo is not None:
 
     st.divider()
 
-    # separar monedas
+    # ---------------------------
+    # Separación por moneda
+    # ---------------------------
+
+    # CON DUPLICADOS
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
+
+    # SIN DUPLICADOS
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
     st.subheader("Separación por moneda")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric("Registros PEN", len(pen))
-    c2.metric("Registros USD", len(usd))
+    c1.metric("PEN totales (con duplicados)", len(pen_total))
+    c2.metric("USD totales (con duplicados)", len(usd_total))
+    c3.metric("PEN sin duplicados", len(pen))
+    c4.metric("USD sin duplicados", len(usd))
 
     st.divider()
 
