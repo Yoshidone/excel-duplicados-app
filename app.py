@@ -14,7 +14,30 @@ archivo = st.file_uploader(
 )
 
 
-# -------- CARGA DE ARCHIVOS --------
+# -------- FUNCION PARA LEER CSV SEGURO --------
+def leer_csv_seguro(f):
+
+    try:
+        df = pl.read_csv(
+            f,
+            separator=",",
+            ignore_errors=True,
+            infer_schema_length=10000
+        )
+    except:
+        f.seek(0)
+
+        df = pl.read_csv(
+            f,
+            separator=";",
+            ignore_errors=True,
+            infer_schema_length=10000
+        )
+
+    return df
+
+
+# -------- CARGA DE ARCHIVO --------
 @st.cache_data
 def cargar_base(file):
 
@@ -22,13 +45,15 @@ def cargar_base(file):
 
     # -------- CSV --------
     if nombre.endswith(".csv"):
-        df = pl.read_csv(file)
 
-    # -------- PARQUET (ULTRA RAPIDO) --------
+        df = leer_csv_seguro(file)
+
+    # -------- PARQUET --------
     elif nombre.endswith(".parquet"):
+
         df = pl.read_parquet(file)
 
-    # -------- ZIP (CSV comprimido) --------
+    # -------- ZIP --------
     elif nombre.endswith(".zip"):
 
         with zipfile.ZipFile(file) as z:
@@ -37,7 +62,7 @@ def cargar_base(file):
 
             with z.open(nombre_archivo) as f:
 
-                df = pl.read_csv(f)
+                df = leer_csv_seguro(f)
 
     # -------- EXCEL --------
     else:
@@ -48,7 +73,7 @@ def cargar_base(file):
         df_pandas.to_csv(buffer, index=False)
         buffer.seek(0)
 
-        df = pl.read_csv(buffer)
+        df = leer_csv_seguro(buffer)
 
     return df
 
@@ -68,16 +93,16 @@ if archivo is not None:
     with st.spinner("Cargando base..."):
         df = cargar_base(archivo)
 
-    st.success("Archivo cargado")
+    st.success("Archivo cargado correctamente")
 
     # -------- RESUMEN --------
-    st.subheader("Resumen")
+    st.subheader("Resumen del archivo")
 
     c1, c2, c3 = st.columns(3)
 
     c1.metric("Filas", df.height)
     c2.metric("Columnas", df.width)
-    c3.metric("Memoria MB", round(df.estimated_size()/1000000, 2))
+    c3.metric("Memoria MB", round(df.estimated_size() / 1000000, 2))
 
     st.divider()
 
@@ -85,7 +110,7 @@ if archivo is not None:
     st.subheader("Detección de duplicados")
 
     columna_dup = st.selectbox(
-        "Selecciona columna",
+        "Selecciona la columna para buscar duplicados",
         df.columns
     )
 
@@ -110,9 +135,12 @@ if archivo is not None:
 
     for col in df.columns:
 
-        if df[col].cast(str).str.contains("PEN|USD").any():
-            moneda_col = col
-            break
+        try:
+            if df[col].cast(str).str.contains("PEN|USD").any():
+                moneda_col = col
+                break
+        except:
+            pass
 
     pen = pl.DataFrame()
     usd = pl.DataFrame()
