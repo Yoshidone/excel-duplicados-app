@@ -1,125 +1,92 @@
 import streamlit as st
 import pandas as pd
-import polars as pl
 from io import BytesIO
-import zipfile
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
-    "Sube tu archivo (Excel, CSV o ZIP)",
-    type=["xlsx", "csv", "zip"]
+    "Sube tu archivo Excel o CSV",
+    type=["xlsx", "csv"]
 )
 
-# ---------- leer csv seguro ----------
-def leer_csv(f):
+def exportar_excel(df):
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    return output.getvalue()
+
+if archivo is not None:
 
     try:
-        return pl.read_csv(f, separator=",", infer_schema_length=1000)
-    except:
-        f.seek(0)
-        return pl.read_csv(f, separator=";", infer_schema_length=1000)
 
+        if archivo.name.endswith(".csv"):
+            df = pd.read_csv(archivo)
+        else:
+            df = pd.read_excel(archivo)
 
-# ---------- cargar archivo ----------
-def cargar_archivo(file):
+        st.success("Archivo cargado correctamente")
 
-    nombre = file.name.lower()
-
-    if nombre.endswith(".csv"):
-        df = leer_csv(file)
-
-    elif nombre.endswith(".zip"):
-
-        with zipfile.ZipFile(file) as z:
-
-            archivo_csv = [f for f in z.namelist() if f.endswith(".csv")][0]
-
-            with z.open(archivo_csv) as f:
-
-                df = leer_csv(f)
-
-    else:
-
-        df = pd.read_excel(file)
-
-        df = pl.from_pandas(df)
-
-    return df
-
-
-# ---------- ejecutar ----------
-if archivo:
-
-    with st.spinner("Procesando archivo..."):
-
-        df = cargar_archivo(archivo)
-
-    st.success("Archivo cargado")
+    except Exception:
+        st.error("No se pudo leer el archivo")
+        st.stop()
 
     st.subheader("Resumen")
 
-    col1, col2 = st.columns(2)
+    c1, c2 = st.columns(2)
 
-    col1.metric("Filas", df.height)
-    col2.metric("Columnas", df.width)
+    c1.metric("Filas", len(df))
+    c2.metric("Columnas", len(df.columns))
 
     st.divider()
 
-    columna = st.selectbox("Selecciona columna para duplicados", df.columns)
+    columna = st.selectbox(
+        "Selecciona columna para detectar duplicados",
+        df.columns
+    )
 
-    duplicados = df.filter(pl.col(columna).is_duplicated())
+    duplicados = df[df.duplicated(columna, keep=False)]
 
-    st.write("Duplicados encontrados:", duplicados.height)
+    st.write("Duplicados encontrados:", len(duplicados))
 
-    if duplicados.height > 0:
+    if len(duplicados) > 0:
+        st.dataframe(duplicados)
 
-        st.dataframe(duplicados.to_pandas(), height=400)
+    st.divider()
 
-    # detectar moneda
     moneda_col = None
 
     for col in df.columns:
-        if df[col].cast(str).str.contains("PEN|USD").any():
+        if df[col].astype(str).str.contains("PEN|USD", na=False).any():
             moneda_col = col
             break
 
     if moneda_col:
 
-        pen = df.filter(pl.col(moneda_col).str.contains("PEN"))
-        usd = df.filter(pl.col(moneda_col).str.contains("USD"))
+        pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
+        usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
 
         st.subheader("Separación por moneda")
 
         c1, c2 = st.columns(2)
 
-        c1.metric("PEN", pen.height)
-        c2.metric("USD", usd.height)
-
-        def exportar(df):
-
-            output = BytesIO()
-
-            df.to_pandas().to_excel(output, index=False)
-
-            return output.getvalue()
+        c1.metric("PEN", len(pen))
+        c2.metric("USD", len(usd))
 
         st.download_button(
             "Descargar duplicados",
-            exportar(duplicados),
+            exportar_excel(duplicados),
             "duplicados.xlsx"
         )
 
         st.download_button(
             "Descargar PEN",
-            exportar(pen),
+            exportar_excel(pen),
             "pen.xlsx"
         )
 
         st.download_button(
             "Descargar USD",
-            exportar(usd),
+            exportar_excel(usd),
             "usd.xlsx"
         )
