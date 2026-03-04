@@ -69,7 +69,6 @@ def cargar_archivo(file):
 
     return df
 
-
 # -------------------------
 # PROCESAR ARCHIVO
 # -------------------------
@@ -85,12 +84,12 @@ if archivo is not None:
     # ELIMINAR DUPLICADOS
     # -------------------------
 
-    if "invoice_public_id" not in df.columns:
+    if "PSP_TIN" not in df.columns:
 
-        st.error("No existe la columna invoice_public_id")
+        st.error("No existe la columna PSP_TIN")
         st.stop()
 
-    df_sin_duplicados = df.drop_duplicates(subset="invoice_public_id")
+    df_sin_duplicados = df.drop_duplicates(subset="PSP_TIN")
 
     # -------------------------
     # DASHBOARD
@@ -125,7 +124,7 @@ if archivo is not None:
         st.stop()
 
     # -------------------------
-    # SEPARAR PEN USD
+    # SEPARAR PEN Y USD
     # -------------------------
 
     pen = df_sin_duplicados[
