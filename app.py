@@ -24,8 +24,9 @@ def exportar_excel(df):
 
     return output.getvalue()
 
+
 # -------------------------
-# LEER CSV
+# LEER CSV SEGURO
 # -------------------------
 def leer_csv_seguro(f):
 
@@ -37,6 +38,7 @@ def leer_csv_seguro(f):
             continue
 
     raise ValueError("No se pudo leer el CSV")
+
 
 # -------------------------
 # CARGAR ARCHIVO
@@ -60,7 +62,6 @@ def cargar_archivo(file):
                 raise ValueError("El ZIP no contiene CSV")
 
             with z.open(archivos_csv[0]) as f:
-
                 df = leer_csv_seguro(f)
 
     else:
@@ -79,18 +80,30 @@ if archivo is not None:
 
         df = cargar_archivo(archivo)
 
+    # normalizar columnas
+    df.columns = df.columns.str.lower().str.strip()
+
     st.success("Archivo cargado correctamente")
+
+    # -------------------------
+    # VALIDAR COLUMNAS
+    # -------------------------
+
+    if "psp_tin" not in df.columns:
+
+        st.error("No existe la columna psp_tin")
+        st.stop()
+
+    if "tx_currency_code" not in df.columns:
+
+        st.error("No existe la columna tx_currency_code")
+        st.stop()
 
     # -------------------------
     # ELIMINAR DUPLICADOS
     # -------------------------
 
-    if "invoice_public_id" not in df.columns:
-
-        st.error("No existe la columna invoice_public_id")
-        st.stop()
-
-    df_sin_duplicados = df.drop_duplicates(subset="invoice_public_id")
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # -------------------------
     # DASHBOARD
@@ -107,33 +120,15 @@ if archivo is not None:
     st.divider()
 
     # -------------------------
-    # DETECTAR MONEDA
-    # -------------------------
-
-    moneda_col = None
-
-    for col in df.columns:
-
-        if df[col].astype(str).str.contains("PEN|USD", na=False).any():
-
-            moneda_col = col
-            break
-
-    if moneda_col is None:
-
-        st.error("No se encontró columna de moneda")
-        st.stop()
-
-    # -------------------------
-    # SEPARAR PEN USD
+    # SEPARAR MONEDA
     # -------------------------
 
     pen = df_sin_duplicados[
-        df_sin_duplicados[moneda_col].astype(str).str.contains("PEN", na=False)
+        df_sin_duplicados["tx_currency_code"] == "PEN"
     ]
 
     usd = df_sin_duplicados[
-        df_sin_duplicados[moneda_col].astype(str).str.contains("USD", na=False)
+        df_sin_duplicados["tx_currency_code"] == "USD"
     ]
 
     st.subheader("Separación por moneda")
@@ -154,25 +149,25 @@ if archivo is not None:
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("Preparar base limpia"):
-            st.download_button(
-                "Descargar base limpia",
-                exportar_excel(df_sin_duplicados),
-                "base_limpia.xlsx"
-            )
+
+        st.download_button(
+            "Descargar base sin duplicados",
+            exportar_excel(df_sin_duplicados),
+            "base_sin_duplicados.xlsx"
+        )
 
     with col2:
-        if st.button("Preparar PEN"):
-            st.download_button(
-                "Descargar PEN",
-                exportar_excel(pen),
-                "pen.xlsx"
-            )
+
+        st.download_button(
+            "Descargar PEN",
+            exportar_excel(pen),
+            "registros_pen.xlsx"
+        )
 
     with col3:
-        if st.button("Preparar USD"):
-            st.download_button(
-                "Descargar USD",
-                exportar_excel(usd),
-                "usd.xlsx"
-            )
+
+        st.download_button(
+            "Descargar USD",
+            exportar_excel(usd),
+            "registros_usd.xlsx"
+        )
