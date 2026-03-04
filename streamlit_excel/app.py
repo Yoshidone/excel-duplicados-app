@@ -9,7 +9,7 @@ archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
 @st.cache_data
 def cargar_excel(archivo):
     df = pd.read_excel(archivo, engine="openpyxl")
-return df
+    return df
 
 if archivo is not None:
 
@@ -44,12 +44,11 @@ if archivo is not None:
     st.download_button(
         label="Descargar Excel completo",
         data=convertir_excel(df),
-        file_name="archivo_completo.xlsx"
+        file_name="archivo_completo.xlsx",
     )
 
     st.download_button(
         label="Descargar duplicados",
         data=convertir_excel(duplicados),
-        file_name="duplicados.xlsx"
+        file_name="duplicados.xlsx",
     )
-
