@@ -4,7 +4,6 @@ import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
-
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
@@ -18,26 +17,40 @@ def exportar_excel(df):
     df.to_excel(output, index=False)
     return output.getvalue()
 
+# ---------- LEER CSV ROBUSTO ----------
+def leer_csv_seguro(f):
+    # probar separadores y encodings comunes
+    for sep in [",", ";"]:
+        for enc in ["utf-8", "latin-1"]:
+            try:
+                f.seek(0)
+                return pd.read_csv(f, sep=sep, encoding=enc, low_memory=False)
+            except Exception:
+                continue
+    raise ValueError("No se pudo leer el CSV")
+
 # ---------- CARGAR ARCHIVO ----------
 @st.cache_data
 def cargar_archivo(file):
 
-    # CSV
-    if file.name.endswith(".csv"):
-        df = pd.read_csv(file, low_memory=False)
+    nombre = file.name.lower()
 
-    # ZIP con CSV
-    elif file.name.endswith(".zip"):
+    if nombre.endswith(".csv"):
+        df = leer_csv_seguro(file)
+
+    elif nombre.endswith(".zip"):
 
         with zipfile.ZipFile(file) as z:
 
-            nombre = z.namelist()[0]
+            # buscar csv dentro del zip
+            archivos_csv = [n for n in z.namelist() if n.lower().endswith(".csv")]
 
-            with z.open(nombre) as f:
+            if not archivos_csv:
+                raise ValueError("El ZIP no contiene un CSV")
 
-                df = pd.read_csv(f, low_memory=False)
+            with z.open(archivos_csv[0]) as f:
+                df = leer_csv_seguro(f)
 
-    # Excel
     else:
         df = pd.read_excel(file)
 
@@ -51,8 +64,8 @@ if archivo is not None:
 
         try:
             df = cargar_archivo(archivo)
-        except:
-            st.error("Error leyendo el archivo")
+        except Exception as e:
+            st.error(f"Error leyendo el archivo: {e}")
             st.stop()
 
     st.success("Archivo cargado correctamente")
@@ -60,7 +73,6 @@ if archivo is not None:
     # ======================
     # DASHBOARD
     # ======================
-
     st.subheader("Dashboard financiero")
 
     col1, col2, col3, col4 = st.columns(4)
@@ -73,20 +85,15 @@ if archivo is not None:
     col2.metric("Columnas", total_columnas)
     col3.metric("Duplicados", duplicados_total)
 
-    # detectar moneda
     moneda_col = None
 
     for col in df.columns:
-
         if df[col].astype(str).str.contains("PEN|USD", na=False).any():
             moneda_col = col
             break
 
     if moneda_col:
-
         pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
-        usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
-
         col4.metric("Registros PEN", len(pen))
 
     st.divider()
@@ -94,7 +101,6 @@ if archivo is not None:
     # ======================
     # BUSCADOR
     # ======================
-
     st.subheader("Buscar registro")
 
     buscar = st.text_input("Buscar cliente, RUC o texto")
@@ -106,7 +112,6 @@ if archivo is not None:
         ).any(axis=1)]
 
         st.write("Resultados encontrados:", len(resultado))
-
         st.dataframe(resultado)
 
     st.divider()
@@ -114,7 +119,6 @@ if archivo is not None:
     # ======================
     # DUPLICADOS
     # ======================
-
     st.subheader("Detección de duplicados")
 
     columna = st.selectbox(
@@ -134,8 +138,10 @@ if archivo is not None:
     # ======================
     # MONEDA
     # ======================
-
     if moneda_col:
+
+        usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
+        pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
 
         st.subheader("Separación por moneda")
 
@@ -144,11 +150,9 @@ if archivo is not None:
         c1.metric("Registros PEN", len(pen))
         c2.metric("Registros USD", len(usd))
 
-        # detectar columna monto
         monto_col = None
 
         for col in df.columns:
-
             if "monto" in col.lower() or "amount" in col.lower():
                 monto_col = col
                 break
@@ -166,7 +170,6 @@ if archivo is not None:
         # ======================
         # DESCARGAS
         # ======================
-
         st.subheader("Descargar resultados")
 
         col1, col2, col3 = st.columns(3)
