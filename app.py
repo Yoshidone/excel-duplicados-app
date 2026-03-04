@@ -10,7 +10,7 @@ archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
 
 
 # -------- CARGA OPTIMIZADA --------
-@st.cache_data(show_spinner=False)
+@st.cache_data
 def cargar_excel(file):
     df = pd.read_excel(file, engine="openpyxl")
     return df
@@ -26,15 +26,30 @@ def convertir_excel(df):
 
 if archivo is not None:
 
-    with st.spinner("Procesando archivo grande..."):
+    with st.spinner("Procesando archivo..."):
         df = cargar_excel(archivo)
 
     st.success("Archivo cargado correctamente")
 
-    # -------- DUPLICADOS --------
-    duplicados = df[df.duplicated(keep=False)]
+    # -------- INFO GENERAL --------
+    st.subheader("Resumen del archivo")
 
-    st.subheader("Registros duplicados encontrados")
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Filas totales", len(df))
+    col2.metric("Columnas", len(df.columns))
+    col3.metric("Memoria aprox (MB)", round(df.memory_usage().sum()/1000000,2))
+
+
+    # -------- SELECCIONAR COLUMNA DUPLICADOS --------
+    st.subheader("Detección de duplicados")
+
+    columna_dup = st.selectbox(
+        "Selecciona la columna para buscar duplicados",
+        df.columns
+    )
+
+    duplicados = df[df.duplicated(subset=[columna_dup], keep=False)]
 
     if not duplicados.empty:
 
@@ -43,13 +58,14 @@ if archivo is not None:
         st.dataframe(
             duplicados,
             use_container_width=True,
-            height=500
+            height=400
         )
 
     else:
         st.success("No se encontraron duplicados")
 
-    # -------- DETECTAR COLUMNA MONEDA --------
+
+    # -------- DETECTAR MONEDA --------
     moneda_col = None
 
     for col in df.columns:
@@ -60,6 +76,7 @@ if archivo is not None:
             moneda_col = col
             break
 
+
     pen = pd.DataFrame()
     usd = pd.DataFrame()
 
@@ -68,8 +85,19 @@ if archivo is not None:
         pen = df[df[moneda_col].astype(str).str.contains("PEN", na=False)]
         usd = df[df[moneda_col].astype(str).str.contains("USD", na=False)]
 
+        st.subheader("Separación por moneda")
+
+        c1, c2 = st.columns(2)
+
+        c1.metric("Registros PEN", len(pen))
+        c2.metric("Registros USD", len(usd))
+
+    else:
+        st.warning("No se detectó columna de moneda automáticamente")
+
+
     # -------- DESCARGAS --------
-    st.subheader("Descargar archivos")
+    st.subheader("Descargar resultados")
 
     col1, col2, col3 = st.columns(3)
 
