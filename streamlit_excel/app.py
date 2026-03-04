@@ -9,7 +9,7 @@ archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx"])
 @st.cache_data
 def cargar_excel(archivo):
     df = pd.read_excel(archivo, engine="openpyxl")
-    return df
+return df
 
 if archivo is not None:
 
@@ -52,3 +52,4 @@ if archivo is not None:
         data=convertir_excel(duplicados),
         file_name="duplicados.xlsx"
     )
+
