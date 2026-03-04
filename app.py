@@ -7,21 +7,37 @@ st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
 st.title("Analizador Financiero de Bases")
 
-archivo = st.file_uploader("Sube tu Excel", type=["xlsx"])
+archivo = st.file_uploader(
+    "Sube tu archivo Excel o CSV",
+    type=["xlsx", "csv"]
+)
 
 
 # -------- CARGA RAPIDA --------
 @st.cache_data
-def cargar_excel(file):
+def cargar_base(file):
 
-    df = pd.read_excel(file, engine="openpyxl")
+    nombre = file.name.lower()
 
-    df = pl.from_pandas(df)
+    # si es csv (MUY rápido)
+    if nombre.endswith(".csv"):
+        df = pl.read_csv(file)
+
+    # si es excel
+    else:
+        df_pandas = pd.read_excel(file, engine="openpyxl")
+
+        # convertir a csv en memoria
+        buffer = BytesIO()
+        df_pandas.to_csv(buffer, index=False)
+        buffer.seek(0)
+
+        df = pl.read_csv(buffer)
 
     return df
 
 
-# -------- EXPORTAR --------
+# -------- EXPORTAR EXCEL --------
 def exportar_excel(df):
 
     output = BytesIO()
@@ -34,26 +50,26 @@ def exportar_excel(df):
 if archivo is not None:
 
     with st.spinner("Cargando base..."):
-        df = cargar_excel(archivo)
+        df = cargar_base(archivo)
 
-    st.success("Archivo cargado")
+    st.success("Archivo cargado correctamente")
 
-    # -------- INFO BASE --------
-    st.subheader("Resumen")
+    # -------- RESUMEN --------
+    st.subheader("Resumen del archivo")
 
     c1, c2, c3 = st.columns(3)
 
     c1.metric("Filas", df.height)
     c2.metric("Columnas", df.width)
-    c3.metric("Memoria MB", round(df.estimated_size()/1000000,2))
+    c3.metric("Memoria MB", round(df.estimated_size()/1000000, 2))
 
     st.divider()
 
     # -------- DUPLICADOS --------
-    st.subheader("Duplicados")
+    st.subheader("Detección de duplicados")
 
     columna_dup = st.selectbox(
-        "Selecciona columna para detectar duplicados",
+        "Selecciona la columna para buscar duplicados",
         df.columns
     )
 
@@ -82,7 +98,6 @@ if archivo is not None:
             moneda_col = col
             break
 
-
     pen = pl.DataFrame()
     usd = pl.DataFrame()
 
@@ -106,7 +121,7 @@ if archivo is not None:
     st.divider()
 
     # -------- DESCARGAS --------
-    st.subheader("Descargar archivos")
+    st.subheader("Descargar resultados")
 
     col1, col2, col3 = st.columns(3)
 
