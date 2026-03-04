@@ -19,13 +19,20 @@ def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 # ---------------------------
-# Leer CSV
+# Leer CSV (MEJORADO PARA METABASE)
 # ---------------------------
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pd.read_csv(f, sep=sep, low_memory=False)
+            return pd.read_csv(
+                f,
+                sep=sep,
+                encoding="utf-8",
+                engine="python",
+                low_memory=False,
+                on_bad_lines="skip"
+            )
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
