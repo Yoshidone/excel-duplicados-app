@@ -5,7 +5,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
-st.title("Analizador Financiero de Bases")
+st.title("💰 Analizador Financiero de Transacciones")
 
 archivo = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
@@ -73,13 +73,10 @@ if archivo is not None:
 
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-    # 🔹 asegurar que tx_reference sea texto
-    df["tx_reference"] = df["tx_reference"].astype(str)
-
-    # ---------------------------
-    # Dashboard
-    # ---------------------------
-    st.subheader("Dashboard financiero")
+# ---------------------------
+# Dashboard
+# ---------------------------
+    st.subheader("Dashboard Financiero")
 
     c1, c2, c3 = st.columns(3)
 
@@ -89,50 +86,9 @@ if archivo is not None:
 
     st.divider()
 
-    # ---------------------------
-    # Separación por moneda
-    # ---------------------------
-    pen = df[df["tx_currency_code"] == "PEN"]
-    usd = df[df["tx_currency_code"] == "USD"]
-
-    st.subheader("Separación por moneda")
-
-    c1, c2 = st.columns(2)
-
-    c1.metric("Registros PEN", len(pen))
-    c2.metric("Registros USD", len(usd))
-
-    st.divider()
-
-    # ---------------------------
-    # Descargas
-    # ---------------------------
-    st.subheader("Descargar resultados")
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.download_button(
-            "Descargar PEN",
-            exportar_csv(pen),
-            "registros_pen.csv",
-            mime="text/csv"
-        )
-
-    with c2:
-        st.download_button(
-            "Descargar USD",
-            exportar_csv(usd),
-            "registros_usd.csv",
-            mime="text/csv"
-        )
-
-# ==================================================
+# ---------------------------
 # COMPARACIÓN DE COMISIONES
-# ==================================================
-
-    st.divider()
-    st.subheader("Comparación de comisiones")
+# ---------------------------
 
     porcentaje_contrato = st.number_input(
         "Porcentaje comisión (%)",
@@ -152,38 +108,55 @@ if archivo is not None:
 # PAGOS (PY)
 # ---------------------------
 
-    pagos = (
-        df[df["tx_reference"].str.startswith("PY", na=False)]
-        .groupby("psp_tin", as_index=False)["tx_amount"]
-        .sum()
-    )
+    pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
 
-    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
+    pagos = pagos[[
+        "psp_tin",
+        "tx_transaction_id",
+        "tx_amount"
+    ]]
+
+    pagos = pagos.rename(columns={
+        "tx_transaction_id": "PY",
+        "tx_amount": "pago"
+    })
 
 # ---------------------------
 # COMISIONES (SF)
 # ---------------------------
 
-    comisiones = (
-        df[df["tx_reference"].str.startswith("SF", na=False)]
-        .groupby("psp_tin", as_index=False)["tx_amount"]
-        .sum()
+    comisiones = df[df["tx_reference"].str.startswith("SF", na=False)]
+
+    comisiones = comisiones[[
+        "sf_transaction_related_id",
+        "tx_transaction_id",
+        "tx_amount"
+    ]]
+
+    comisiones = comisiones.rename(columns={
+        "sf_transaction_related_id": "PY",
+        "tx_transaction_id": "SF",
+        "tx_amount": "comision"
+    })
+
+# ---------------------------
+# MERGE PY ↔ SF
+# ---------------------------
+
+    tabla = pagos.merge(
+        comisiones,
+        on="PY",
+        how="left"
     )
 
-    comisiones = comisiones.rename(columns={"tx_amount": "comision"})
+    tabla = tabla.fillna(0)
 
 # ---------------------------
-# MERGE
-# ---------------------------
-
-    tabla = pagos.merge(comisiones, on="psp_tin", how="left")
-
-# ---------------------------
-# comisión contrato
+# COMISION CONTRATO
 # ---------------------------
 
     tabla["comision_contrato"] = (
-        (tabla["tx_amount_pago"] * (porcentaje_contrato / 100))
+        (tabla["pago"] * (porcentaje_contrato / 100))
         + fee_fijo
     )
 
@@ -193,7 +166,7 @@ if archivo is not None:
     tabla["comision_contrato"] = tabla["comision_contrato"].round(2)
 
 # ---------------------------
-# diferencia
+# DIFERENCIA
 # ---------------------------
 
     tabla["diferencia"] = (
@@ -201,33 +174,45 @@ if archivo is not None:
     ).round(2)
 
 # ---------------------------
-# neto
+# NETO
 # ---------------------------
 
-    tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+    tabla["neto"] = tabla["pago"] - tabla["comision"]
+
+# ---------------------------
+# AGRUPAR POR PSP
+# ---------------------------
+
+    tabla = tabla.groupby("psp_tin", as_index=False).agg({
+        "PY": "first",
+        "SF": "first",
+        "pago": "sum",
+        "comision": "sum",
+        "comision_contrato": "sum",
+        "diferencia": "sum",
+        "neto": "sum"
+    })
 
 # ---------------------------
 # Resumen
 # ---------------------------
 
-    total_pagos = tabla["tx_amount_pago"].sum()
+    total_pagos = tabla["pago"].sum()
     total_comisiones = tabla["comision"].sum()
-    total_neto = tabla["total_neto"].sum()
-    total_diferencia = tabla["diferencia"].sum()
+    total_neto = tabla["neto"].sum()
 
     st.subheader("Resumen financiero")
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
 
     c1.metric("Total pagos", round(total_pagos, 2))
     c2.metric("Total comisiones", round(total_comisiones, 2))
     c3.metric("Total neto", round(total_neto, 2))
-    c4.metric("Total diferencia", round(total_diferencia, 2))
 
     st.dataframe(tabla)
 
     st.download_button(
-        "Descargar comparación de comisiones",
+        "Descargar comparación",
         exportar_csv(tabla),
         "comparacion_comisiones.csv",
         mime="text/csv"
