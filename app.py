@@ -235,4 +235,3 @@ if archivo is not None:
         "comparacion_comisiones.csv",
         mime="text/csv"
     )
-```
