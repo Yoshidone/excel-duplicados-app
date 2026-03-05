@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import zipfile
-from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
@@ -17,14 +16,13 @@ aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
 porcentaje = porcentaje / 100
 
-
 # -------------------------
 # SUBIR ARCHIVO
 # -------------------------
 
 archivo = st.file_uploader(
     "Subir archivo CSV, Excel o ZIP",
-    type=["csv","xlsx","zip"]
+    type=["csv", "xlsx", "zip"]
 )
 
 if archivo:
@@ -38,12 +36,12 @@ if archivo:
         with zipfile.ZipFile(archivo) as z:
 
             lista_archivos = z.namelist()
-
             nombre_archivo = lista_archivos[0]
 
             with z.open(nombre_archivo) as f:
 
                 if nombre_archivo.endswith(".csv"):
+
                     try:
                         df = pd.read_csv(f, sep=";")
                     except:
@@ -60,9 +58,7 @@ if archivo:
             df = pd.read_csv(archivo)
 
     else:
-
         df = pd.read_excel(archivo)
-
 
     # -------------------------
     # LIMPIAR COLUMNAS
@@ -73,31 +69,43 @@ if archivo:
     st.subheader("Preview datos")
     st.dataframe(df.head())
 
-
     # -------------------------
     # VALIDAR COLUMNAS
     # -------------------------
 
-    columnas_necesarias = ["Deuda_external_id","OP_amount"]
+    columnas_necesarias = ["Deuda_external_id", "OP_amount"]
 
     for col in columnas_necesarias:
         if col not in df.columns:
-            st.error(f"Falta la columna {col}")
+            st.error(f"Falta la columna: {col}")
             st.stop()
 
+    # -------------------------
+    # LIMPIAR MONTO
+    # -------------------------
 
-# LIMPIAR Y CONVERTIR MONTO
-
-df["OP_amount"] = pd.to_numeric(df["OP_amount"], errors="coerce")
-
-# SEPARAR PAGOS Y COMISIONES
-
-pagos = df[df["OP_amount"] > 0]
-comisiones = df[df["OP_amount"] < 0]
-
+    df["OP_amount"] = pd.to_numeric(df["OP_amount"], errors="coerce")
+    df = df.dropna(subset=["OP_amount"])
 
     # -------------------------
-    # CALCULAR COMISIÓN
+    # SEPARAR PAGOS Y COMISIONES
+    # -------------------------
+
+    pagos = df[df["OP_amount"] > 0]
+    comisiones = df[df["OP_amount"] < 0]
+
+    pagos = pagos.groupby("Deuda_external_id")["OP_amount"].sum().reset_index()
+    pagos.rename(columns={"OP_amount": "tx_amount_pago"}, inplace=True)
+
+    comisiones = comisiones.groupby("Deuda_external_id")["OP_amount"].sum().reset_index()
+    comisiones.rename(columns={"OP_amount": "comision_contrato"}, inplace=True)
+
+    resultado = pagos.merge(comisiones, on="Deuda_external_id", how="left")
+
+    resultado["comision_contrato"] = resultado["comision_contrato"].abs()
+
+    # -------------------------
+    # CALCULAR COMISIÓN ESPERADA
     # -------------------------
 
     resultado["comision"] = (resultado["tx_amount_pago"] * porcentaje) + fee_fijo
@@ -106,17 +114,14 @@ comisiones = df[df["OP_amount"] < 0]
         resultado["comision"] = resultado["comision"] * 1.18
 
     resultado["comision"] = resultado["comision"].round(2)
-   df = df.dropna(subset=["OP_amount"])
-
 
     # -------------------------
-    # DIFERENCIAS
+    # DIFERENCIA
     # -------------------------
 
     resultado["diferencia"] = resultado["comision_contrato"] - resultado["comision"]
 
     resultado["total_neto"] = resultado["tx_amount_pago"] - resultado["comision_contrato"]
-
 
     # -------------------------
     # DASHBOARD
@@ -124,7 +129,7 @@ comisiones = df[df["OP_amount"] < 0]
 
     st.subheader("Dashboard financiero")
 
-    col1,col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
     with col1:
         st.metric("Total registros", len(df))
@@ -132,13 +137,11 @@ comisiones = df[df["OP_amount"] < 0]
     with col2:
         st.metric("Transacciones únicas", len(resultado))
 
-
     # -------------------------
     # TABLA
     # -------------------------
 
     st.dataframe(resultado)
-
 
     # -------------------------
     # CONTROL COMISIONES
@@ -148,14 +151,13 @@ comisiones = df[df["OP_amount"] < 0]
 
     no_coinciden = resultado[resultado["diferencia"].abs() > 0.01]
 
-    col1,col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
     with col1:
         st.metric("Total comisiones analizadas", len(resultado))
 
     with col2:
         st.metric("Comisiones que NO coinciden", len(no_coinciden))
-
 
     # -------------------------
     # DESCARGAR RESULTADO
@@ -169,4 +171,3 @@ comisiones = df[df["OP_amount"] < 0]
         "comparacion_comisiones.csv",
         "text/csv"
     )
-
