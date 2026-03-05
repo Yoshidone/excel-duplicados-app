@@ -71,14 +71,6 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    if "psp_tin" not in df.columns:
-        st.error("No existe la columna psp_tin")
-        st.stop()
-
-    if "tx_currency_code" not in df.columns:
-        st.error("No existe la columna tx_currency_code")
-        st.stop()
-
     # normalizar texto
     df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
@@ -87,7 +79,7 @@ if archivo is not None:
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # ---------------------------
-    # LIMPIAR IDS
+    # LIMPIAR IDS (ELIMINAR COMAS)
     # ---------------------------
 
     df["tx_transaction_id_clean"] = (
@@ -110,6 +102,7 @@ if archivo is not None:
     # ---------------------------
     # Dashboard general
     # ---------------------------
+
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -144,6 +137,7 @@ if archivo is not None:
     # ---------------------------
     # Descargas
     # ---------------------------
+
     st.subheader("Descargar resultados")
 
     c1, c2, c3 = st.columns(3)
@@ -198,39 +192,35 @@ if archivo is not None:
 
     pagos["tx_amount_pago"] = pagos["tx_amount"]
 
-    # buscar comisiones en cualquier fila
-    fees = df[df["sf_transaction_related_id_clean"] != ""].copy()
-
-    fees["tx_amount_comision"] = fees["tx_amount"]
-
-    # match usando ids limpiados
-    comisiones = pagos.merge(
-        fees[["sf_transaction_related_id_clean", "tx_amount_comision"]],
-        left_on="tx_transaction_id_clean",
-        right_on="sf_transaction_related_id_clean",
-        how="left"
+    # crear mapa de comisiones
+    fees_map = (
+        df[df["sf_transaction_related_id_clean"] != ""]
+        .set_index("sf_transaction_related_id_clean")["tx_amount"]
+        .abs()
     )
 
-    # comisión real
-    comisiones["comision"] = comisiones["tx_amount_comision"].abs()
+    # buscar comisión por ID
+    pagos["comision"] = pagos["tx_transaction_id_clean"].map(fees_map)
+
+    pagos["comision"] = pagos["comision"].fillna(0)
 
     # comisión contrato
-    comisiones["comision_contrato"] = (
-        (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
+    pagos["comision_contrato"] = (
+        (pagos["tx_amount_pago"] * (porcentaje_contrato / 100))
         + fee_fijo
     )
 
     if aplicar_igv:
-        comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+        pagos["comision_contrato"] = pagos["comision_contrato"] * 1.18
 
-    comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
+    pagos["comision_contrato"] = pagos["comision_contrato"].round(2)
 
     # diferencia
-    comisiones["diferencia"] = (
-        comisiones["comision"] - comisiones["comision_contrato"]
+    pagos["diferencia"] = (
+        pagos["comision"] - pagos["comision_contrato"]
     ).round(2)
 
-    tabla = comisiones[
+    tabla = pagos[
         [
             "psp_tin",
             "tx_amount_pago",
@@ -239,8 +229,6 @@ if archivo is not None:
             "diferencia"
         ]
     ]
-
-    tabla = tabla.fillna(0)
 
     tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
