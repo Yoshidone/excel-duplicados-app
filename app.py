@@ -5,7 +5,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
-st.title("💰 Analizador Financiero de Transacciones")
+st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
@@ -58,6 +58,7 @@ def cargar_archivo(file):
 
     return df
 
+
 # ---------------------------
 # Procesar
 # ---------------------------
@@ -70,12 +71,15 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce")
+    df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-# ---------------------------
-# Dashboard
-# ---------------------------
-    st.subheader("Dashboard Financiero")
+    # 🔹 asegurar que tx_reference sea texto
+    df["tx_reference"] = df["tx_reference"].astype(str)
+
+    # ---------------------------
+    # Dashboard
+    # ---------------------------
+    st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
 
@@ -85,9 +89,9 @@ if archivo is not None:
 
     st.divider()
 
-# ---------------------------
-# Separación por moneda
-# ---------------------------
+    # ---------------------------
+    # Separación por moneda
+    # ---------------------------
     pen = df[df["tx_currency_code"] == "PEN"]
     usd = df[df["tx_currency_code"] == "USD"]
 
@@ -100,9 +104,9 @@ if archivo is not None:
 
     st.divider()
 
-# ---------------------------
-# Descargas
-# ---------------------------
+    # ---------------------------
+    # Descargas
+    # ---------------------------
     st.subheader("Descargar resultados")
 
     c1, c2 = st.columns(2)
@@ -149,36 +153,30 @@ if archivo is not None:
 # ---------------------------
 
     pagos = (
-        df[df["op_operation_no"].str.startswith("PY", na=False)]
-        .groupby("psp_tin")["op_amount"]
+        df[df["tx_reference"].str.startswith("PY", na=False)]
+        .groupby("psp_tin", as_index=False)["tx_amount"]
         .sum()
-        .reset_index()
     )
 
-    pagos = pagos.rename(columns={"op_amount": "tx_amount_pago"})
+    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
 
 # ---------------------------
 # COMISIONES (SF)
 # ---------------------------
 
     comisiones = (
-        df[df["op_operation_no"].str.startswith("SF", na=False)]
-        .groupby("psp_tin")["op_amount"]
+        df[df["tx_reference"].str.startswith("SF", na=False)]
+        .groupby("psp_tin", as_index=False)["tx_amount"]
         .sum()
-        .reset_index()
     )
 
-    comisiones["op_amount"] = comisiones["op_amount"].abs()
-
-    comisiones = comisiones.rename(columns={"op_amount": "comision"})
+    comisiones = comisiones.rename(columns={"tx_amount": "comision"})
 
 # ---------------------------
 # MERGE
 # ---------------------------
 
     tabla = pagos.merge(comisiones, on="psp_tin", how="left")
-
-    tabla = tabla.fillna(0)
 
 # ---------------------------
 # comisión contrato
