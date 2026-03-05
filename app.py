@@ -1,18 +1,39 @@
 import streamlit as st
 import pandas as pd
 import zipfile
+from io import BytesIO
 
-st.set_page_config(page_title="Analizador Financiero", layout="wide")
+# ---------------------------------------------------
+# CONFIGURACIÓN
+# ---------------------------------------------------
 
-st.title("Analizador Financiero de Transacciones")
+st.set_page_config(
+    page_title="Analizador Financiero",
+    layout="wide"
+)
+
+st.title("💰 Analizador Financiero de Transacciones")
+st.markdown("Sube tu base para analizar pagos, comisiones y resultados netos.")
+
+# ---------------------------------------------------
+# SUBIR ARCHIVO
+# ---------------------------------------------------
 
 archivo = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
     type=["xlsx", "csv", "zip"]
 )
 
+# ---------------------------------------------------
+# EXPORTAR CSV
+# ---------------------------------------------------
+
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
+
+# ---------------------------------------------------
+# LEER CSV
+# ---------------------------------------------------
 
 def leer_csv_seguro(f):
 
@@ -24,6 +45,10 @@ def leer_csv_seguro(f):
             continue
 
     raise ValueError("No se pudo leer el CSV")
+
+# ---------------------------------------------------
+# CARGAR ARCHIVO
+# ---------------------------------------------------
 
 @st.cache_data
 def cargar_archivo(file):
@@ -50,6 +75,9 @@ def cargar_archivo(file):
 
     return df
 
+# ---------------------------------------------------
+# PROCESAR
+# ---------------------------------------------------
 
 if archivo is not None:
 
@@ -60,40 +88,49 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
+    df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce")
 
-    df["tx_reference"] = df["tx_reference"].astype(str)
-    df["op_operation_no"] = df["op_operation_no"].astype(str)
+# ---------------------------------------------------
+# DASHBOARD
+# ---------------------------------------------------
 
-    st.subheader("Dashboard")
+    st.subheader("📊 Dashboard Financiero")
 
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("Total registros", len(df))
-    c2.metric("Columnas", len(df.columns))
-    c3.metric("PSP únicos", df["psp_tin"].nunique())
+    c1.metric("📄 Total registros", f"{len(df):,}")
+    c2.metric("📊 Columnas", len(df.columns))
+    c3.metric("🏦 PSP únicos", df["psp_tin"].nunique())
 
     st.divider()
+
+# ---------------------------------------------------
+# SEPARACIÓN POR MONEDA
+# ---------------------------------------------------
 
     pen = df[df["tx_currency_code"] == "PEN"]
     usd = df[df["tx_currency_code"] == "USD"]
 
-    st.subheader("Separación por moneda")
+    st.subheader("💱 Separación por moneda")
 
     c1, c2 = st.columns(2)
 
-    c1.metric("Registros PEN", len(pen))
-    c2.metric("Registros USD", len(usd))
+    c1.metric("🇵🇪 Registros PEN", f"{len(pen):,}")
+    c2.metric("🇺🇸 Registros USD", f"{len(usd):,}")
 
     st.divider()
 
-    st.subheader("Descargar resultados")
+# ---------------------------------------------------
+# DESCARGAS
+# ---------------------------------------------------
+
+    st.subheader("⬇️ Descargar resultados")
 
     c1, c2 = st.columns(2)
 
     with c1:
         st.download_button(
-            "Descargar PEN",
+            "Descargar registros PEN",
             exportar_csv(pen),
             "registros_pen.csv",
             mime="text/csv"
@@ -101,15 +138,18 @@ if archivo is not None:
 
     with c2:
         st.download_button(
-            "Descargar USD",
+            "Descargar registros USD",
             exportar_csv(usd),
             "registros_usd.csv",
             mime="text/csv"
         )
 
-    st.divider()
+# ===================================================
+# COMPARACIÓN FINANCIERA
+# ===================================================
 
-    st.subheader("Comparación de comisiones")
+    st.divider()
+    st.subheader("💳 Comparación de comisiones")
 
     porcentaje_contrato = st.number_input(
         "Porcentaje comisión (%)",
@@ -125,25 +165,43 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
+# ---------------------------------------------------
+# PAGOS (montos positivos)
+# ---------------------------------------------------
+
     pagos = (
-        df[df["op_operation_no"].str.startswith("PY", na=False)]
-        .groupby("psp_tin", as_index=False)["tx_amount"]
+        df[df["op_amount"] > 0]
+        .groupby("psp_tin", as_index=False)["op_amount"]
         .sum()
     )
 
-    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
+    pagos = pagos.rename(columns={"op_amount": "tx_amount_pago"})
+
+# ---------------------------------------------------
+# COMISIONES (montos negativos)
+# ---------------------------------------------------
 
     comisiones = (
-        df[df["tx_reference"].str.startswith("SF", na=False)]
-        .groupby("psp_tin", as_index=False)["tx_amount"]
+        df[df["op_amount"] < 0]
+        .groupby("psp_tin", as_index=False)["op_amount"]
         .sum()
     )
 
-    comisiones = comisiones.rename(columns={"tx_amount": "comision"})
+    comisiones["op_amount"] = comisiones["op_amount"].abs()
+
+    comisiones = comisiones.rename(columns={"op_amount": "comision"})
+
+# ---------------------------------------------------
+# MERGE
+# ---------------------------------------------------
 
     tabla = pagos.merge(comisiones, on="psp_tin", how="left")
 
     tabla = tabla.fillna(0)
+
+# ---------------------------------------------------
+# COMISIÓN CONTRATO
+# ---------------------------------------------------
 
     tabla["comision_contrato"] = (
         (tabla["tx_amount_pago"] * (porcentaje_contrato / 100))
@@ -155,23 +213,35 @@ if archivo is not None:
 
     tabla["comision_contrato"] = tabla["comision_contrato"].round(2)
 
+# ---------------------------------------------------
+# DIFERENCIA
+# ---------------------------------------------------
+
     tabla["diferencia"] = (
         tabla["comision"] - tabla["comision_contrato"]
     ).round(2)
 
+# ---------------------------------------------------
+# TOTAL NETO
+# ---------------------------------------------------
+
     tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+
+# ---------------------------------------------------
+# RESUMEN
+# ---------------------------------------------------
 
     total_pagos = tabla["tx_amount_pago"].sum()
     total_comisiones = tabla["comision"].sum()
     total_neto = tabla["total_neto"].sum()
 
-    st.subheader("Resumen financiero")
+    st.subheader("📊 Resumen financiero")
 
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("Total pagos", round(total_pagos, 2))
-    c2.metric("Total comisiones", round(total_comisiones, 2))
-    c3.metric("Total neto", round(total_neto, 2))
+    c1.metric("💰 Total pagos", round(total_pagos, 2))
+    c2.metric("💸 Total comisiones", round(total_comisiones, 2))
+    c3.metric("💵 Total neto", round(total_neto, 2))
 
     st.dataframe(tabla)
 
