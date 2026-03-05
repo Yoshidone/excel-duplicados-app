@@ -7,10 +7,7 @@ from io import BytesIO
 # CONFIGURACIÓN
 # ---------------------------------------------------
 
-st.set_page_config(
-    page_title="Analizador Financiero",
-    layout="wide"
-)
+st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
 st.title("💰 Analizador Financiero de Transacciones")
 st.markdown("Sube tu base para analizar pagos, comisiones y resultados netos.")
@@ -74,6 +71,7 @@ def cargar_archivo(file):
         df = pd.read_excel(file)
 
     return df
+
 
 # ---------------------------------------------------
 # PROCESAR
@@ -166,7 +164,7 @@ if archivo is not None:
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
 # ---------------------------------------------------
-# PAGOS (PY)
+# PAGOS (solo PY)
 # ---------------------------------------------------
 
     pagos = (
@@ -178,7 +176,7 @@ if archivo is not None:
     pagos = pagos.rename(columns={"op_amount": "tx_amount_pago"})
 
 # ---------------------------------------------------
-# COMISIONES (SF)
+# COMISIONES (solo SF)
 # ---------------------------------------------------
 
     comisiones = (
