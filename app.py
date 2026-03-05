@@ -79,7 +79,7 @@ if archivo is not None:
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # ---------------------------
-    # LIMPIAR IDS (ELIMINAR COMAS)
+    # LIMPIAR IDS (QUITAR COMAS)
     # ---------------------------
 
     df["tx_transaction_id_clean"] = (
@@ -195,11 +195,12 @@ if archivo is not None:
     # crear mapa de comisiones
     fees_map = (
         df[df["sf_transaction_related_id_clean"] != ""]
-        .set_index("sf_transaction_related_id_clean")["tx_amount"]
+        .groupby("sf_transaction_related_id_clean")["tx_amount"]
+        .sum()
         .abs()
     )
 
-    # buscar comisión por ID
+    # buscar comisión por id
     pagos["comision"] = pagos["tx_transaction_id_clean"].map(fees_map)
 
     pagos["comision"] = pagos["comision"].fillna(0)
