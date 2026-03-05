@@ -61,20 +61,22 @@ if archivo is not None:
     df.columns = df.columns.str.lower().str.strip()
 
     # ---------------------------
-    # DETECTAR TIPO OPERACION (Ajuste para identificar ambos correctamente)
+    # DETECTAR TIPO OPERACION (REGLA PY = TOTAL, SF = COMISION)
     # ---------------------------
     df["tipo_operacion"] = "OTRO"
-    
-    # Aseguramos que tx_amount sea numérico para poder comparar
-    if "tx_amount" in df.columns:
-        df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-    # Identificar PAGOS: Si la columna tipo dice PAGO o si el monto es positivo
-    if "tipo" in df.columns:
-        df.loc[df["tipo"].astype(str).str.upper() == "PAGO", "tipo_operacion"] = "PAGO"
-    
-    # Identificar COMISIONES: Si el monto es negativo y no es un pago
-    df.loc[(df["tx_amount"] < 0), "tipo_operacion"] = "COMISION"
+    if "tx_reference" in df.columns:
+        # PY es PAGO (Total)
+        df.loc[
+            df["tx_reference"].astype(str).str.upper().str.startswith("PY", na=False),
+            "tipo_operacion"
+        ] = "PAGO"
+
+        # SF es COMISION
+        df.loc[
+            df["tx_reference"].astype(str).str.upper().str.startswith("SF", na=False),
+            "tipo_operacion"
+        ] = "COMISION"
 
     st.success("Archivo cargado correctamente")
 
@@ -138,7 +140,7 @@ if archivo is not None:
         st.download_button("Descargar USD", exportar_csv(usd), "registros_usd.csv", mime="text/csv")
 
 # ==================================================
-# ANALISIS DE COMISIONES (Tu lógica original reparada)
+# ANALISIS DE COMISIONES
 # ==================================================
 
     st.divider()
@@ -150,26 +152,33 @@ if archivo is not None:
 
     if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-        # REPARACIÓN: Usamos un merge exterior (outer) o consolidamos para que no se pierdan los montos
-        pagos = df[df["tipo_operacion"] == "PAGO"][["psp_tin", "tx_amount"]].rename(columns={"tx_amount": "tx_amount_pago"})
-        fees = df[df["tipo_operacion"] == "COMISION"][["psp_tin", "tx_amount"]].rename(columns={"tx_amount": "tx_amount_comision"})
+        # Aseguramos que tx_amount sea numérico antes del merge
+        df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce").fillna(0)
 
-        # Hacemos el merge asegurando que traiga ambos datos
-        comisiones = pd.merge(pagos, fees, on="psp_tin", how="outer")
+        pagos = df[df["tipo_operacion"] == "PAGO"]
+        fees = df[df["tipo_operacion"] == "COMISION"]
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce").fillna(0)
-        comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce").fillna(0)
+        # Cambiamos a outer merge para que no se pierdan datos si un psp_tin no tiene su par
+        comisiones = pagos.merge(
+            fees[["psp_tin", "tx_amount"]],
+            on="psp_tin",
+            how="outer",
+            suffixes=("_pago", "_comision")
+        )
+
+        comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].fillna(0)
+        comisiones["tx_amount_comision"] = comisiones["tx_amount_comision"].fillna(0)
 
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        # Cálculo de contrato
-        comisiones["comision_contrato"] = (
-            (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
+        # Cálculo de contrato: solo si hay monto de pago
+        comisiones["comision_contrato"] = 0.0
+        mask_pago = comisiones["tx_amount_pago"] > 0
+        
+        comisiones.loc[mask_pago, "comision_contrato"] = (
+            (comisiones.loc[mask_pago, "tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
         )
-
-        # Solo aplicar comisión si hubo un pago (evita que registros de solo comisión calculen fee fijo)
-        comisiones.loc[comisiones["tx_amount_pago"] == 0, "comision_contrato"] = 0
 
         if aplicar_igv:
             comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
@@ -185,7 +194,7 @@ if archivo is not None:
 
         st.subheader("Control de comisiones")
         c1, c2 = st.columns(2)
-        c1.metric("Total registros analizados", len(tabla))
-        c2.metric("Discrepancias", len(tabla[tabla["diferencia"] != 0]))
+        c1.metric("Total comisiones analizadas", len(tabla))
+        c2.metric("Diferencias", len(tabla[tabla["diferencia"] != 0]))
 
-        st.download_button("Descargar reporte final", exportar_csv(tabla), "reporte_comisiones.csv", mime="text/csv")
+        st.download_button("Descargar reporte", exportar_csv(tabla), "comparacion_comisiones.csv", mime="text/csv")
