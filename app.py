@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import zipfile
 from io import BytesIO
@@ -18,8 +18,9 @@ archivo = st.file_uploader(
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
+
 # ---------------------------
-# Leer CSV
+# Leer CSV seguro
 # ---------------------------
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
@@ -29,6 +30,7 @@ def leer_csv_seguro(f):
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
+
 
 # ---------------------------
 # Cargar archivo
@@ -43,6 +45,7 @@ def cargar_archivo(file):
 
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
+
             archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
 
             if not archivos_csv:
@@ -228,11 +231,17 @@ if archivo is not None:
 
     comisiones_cliente["comision"] = comisiones_cliente["tx_amount_comision"].abs()
 
-    # porcentaje de comisión por cliente
+    # evitar valores nulos
+    comisiones_cliente["comision"] = comisiones_cliente["comision"].fillna(0)
+
+    # evitar división por 0
+    comisiones_cliente["tx_amount_pago"] = comisiones_cliente["tx_amount_pago"].replace(0, pd.NA)
+
+    # porcentaje comisión corregido
     comisiones_cliente["porcentaje_comision"] = (
-        comisiones_cliente["comision"] /
-        comisiones_cliente["tx_amount_pago"]
-    ) * 100
+        (comisiones_cliente["comision"] /
+        comisiones_cliente["tx_amount_pago"]) * 100
+    ).round(2)
 
     columnas_mostrar = [
         "deb_nombre",
