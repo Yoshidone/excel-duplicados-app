@@ -68,24 +68,6 @@ if archivo is not None:
 
     df.columns = df.columns.str.lower().str.strip()
 
-    # ---------------------------
-    # DETECTAR TIPO OPERACION
-    # ---------------------------
-
-    df["tipo_operacion"] = "OTRO"
-
-    if "tx_reference" in df.columns:
-        df.loc[
-            df["tx_reference"].astype(str).str.upper().str.startswith("PY", na=False),
-            "tipo_operacion"
-        ] = "PAGO"
-
-    if "op_operation_no" in df.columns:
-        df.loc[
-            df["op_operation_no"].astype(str).str.upper().str.startswith("SF", na=False),
-            "tipo_operacion"
-        ] = "COMISION"
-
     st.success("Archivo cargado correctamente")
 
     if "psp_tin" not in df.columns:
@@ -96,86 +78,48 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
-    # normalizar moneda
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
-    # normalizar referencia
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # eliminar duplicados
-    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
+    if "op_operation_no" in df.columns:
+        df["op_operation_no"] = df["op_operation_no"].astype(str).str.upper()
 
     # ---------------------------
     # Dashboard
     # ---------------------------
+
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
 
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
-    c3.metric("Registros sin duplicados", len(df_sin_duplicados))
+    c3.metric("PSP únicos", df["psp_tin"].nunique())
 
     st.divider()
 
     # ---------------------------
-    # Separación por moneda
+    # Separación moneda
     # ---------------------------
 
-    pen_total = df[df["tx_currency_code"] == "PEN"]
-    usd_total = df[df["tx_currency_code"] == "USD"]
-
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
+    pen = df[df["tx_currency_code"] == "PEN"]
+    usd = df[df["tx_currency_code"] == "USD"]
 
     st.subheader("Separación por moneda")
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2 = st.columns(2)
 
-    c1.metric("PEN totales (con duplicados)", len(pen_total))
-    c2.metric("USD totales (con duplicados)", len(usd_total))
-    c3.metric("PEN sin duplicados", len(pen))
-    c4.metric("USD sin duplicados", len(usd))
+    c1.metric("Transacciones PEN", len(pen))
+    c2.metric("Transacciones USD", len(usd))
 
     st.divider()
 
-    # ---------------------------
-    # Descargas
-    # ---------------------------
-    st.subheader("Descargar resultados")
+    # ==================================================
+    # ANALISIS DE COMISIONES
+    # ==================================================
 
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.download_button(
-            "Descargar base sin duplicados",
-            exportar_csv(df_sin_duplicados),
-            "base_sin_duplicados.csv",
-            mime="text/csv"
-        )
-
-    with c2:
-        st.download_button(
-            "Descargar PEN",
-            exportar_csv(pen),
-            "registros_pen.csv",
-            mime="text/csv"
-        )
-
-    with c3:
-        st.download_button(
-            "Descargar USD",
-            exportar_csv(usd),
-            "registros_usd.csv",
-            mime="text/csv"
-        )
-
-# ==================================================
-# ANALISIS DE COMISIONES
-# ==================================================
-
-    st.divider()
     st.subheader("Comparación de comisiones")
 
     porcentaje_contrato = st.number_input(
@@ -192,72 +136,80 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "tx_reference" in df.columns and "tx_amount" in df.columns:
+    # ---------------------------
+    # PAGOS
+    # ---------------------------
 
-        pagos = df[df["tipo_operacion"] == "PAGO"]
-        fees = df[df["tipo_operacion"] == "COMISION"]
+    pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
 
-        comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
-            how="left",
-            suffixes=("_pago", "_comision")
-        )
+    # ---------------------------
+    # COMISIONES
+    # ---------------------------
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(
-            comisiones["tx_amount_pago"], errors="coerce"
-        )
+    fees = df[df["op_operation_no"].str.startswith("SF", na=False)].copy()
 
-        comisiones["tx_amount_comision"] = pd.to_numeric(
-            comisiones["tx_amount_comision"], errors="coerce"
-        )
+    # convertir montos
+    pagos["tx_amount"] = pd.to_numeric(pagos["tx_amount"], errors="coerce")
+    fees["op_amount"] = pd.to_numeric(fees["op_amount"], errors="coerce")
 
-        comisiones["comision"] = comisiones["tx_amount_comision"].abs()
+    # ---------------------------
+    # MERGE CORRECTO
+    # ---------------------------
 
-        comisiones["comision_contrato"] = (
-            (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
-            + fee_fijo
-        )
+    comisiones = pagos.merge(
+        fees[["sf_transaction_related_id", "op_amount"]],
+        left_on="tx_transaction_id",
+        right_on="sf_transaction_related_id",
+        how="left"
+    )
 
-        if aplicar_igv:
-            comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+    # comisión real
+    comisiones["comision"] = comisiones["op_amount"].abs()
 
-        comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
+    # comisión contrato
+    comisiones["comision_contrato"] = (
+        (comisiones["tx_amount"] * (porcentaje_contrato / 100))
+        + fee_fijo
+    )
 
-        comisiones["diferencia"] = (
-            comisiones["comision"] - comisiones["comision_contrato"]
-        ).round(2)
+    if aplicar_igv:
+        comisiones["comision_contrato"] *= 1.18
 
-        tabla = comisiones[
-            [
-                "psp_tin",
-                "tx_amount_pago",
-                "comision",
-                "comision_contrato",
-                "diferencia"
-            ]
+    comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
+
+    # diferencia
+    comisiones["diferencia"] = (
+        comisiones["comision"] - comisiones["comision_contrato"]
+    ).round(2)
+
+    tabla = comisiones[
+        [
+            "psp_tin",
+            "tx_transaction_id",
+            "tx_amount",
+            "comision",
+            "comision_contrato",
+            "diferencia"
         ]
+    ].fillna(0)
 
-        tabla = tabla.fillna(0)
+    tabla["total_neto"] = tabla["tx_amount"] - tabla["comision"]
 
-        tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+    st.dataframe(tabla)
 
-        st.dataframe(tabla)
+    st.subheader("Control de comisiones")
 
-        st.subheader("Control de comisiones")
+    c1, c2 = st.columns(2)
 
-        c1, c2 = st.columns(2)
+    c1.metric("Total comisiones analizadas", len(tabla))
+    c2.metric(
+        "Comisiones que NO coinciden",
+        len(tabla[tabla["diferencia"] != 0])
+    )
 
-        c1.metric("Total comisiones analizadas", len(tabla))
-
-        c2.metric(
-            "Comisiones que NO coinciden",
-            len(tabla[tabla["diferencia"] != 0])
-        )
-
-        st.download_button(
-            "Descargar comparación de comisiones",
-            exportar_csv(tabla),
-            "comparacion_comisiones.csv",
-            mime="text/csv"
-        )
+    st.download_button(
+        "Descargar comparación de comisiones",
+        exportar_csv(tabla),
+        "comparacion_comisiones.csv",
+        mime="text/csv"
+    )
