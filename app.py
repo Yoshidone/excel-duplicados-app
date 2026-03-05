@@ -86,17 +86,24 @@ if archivo is not None:
     # convertir montos
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-    # limpiar ids de transacción (soluciona el error que viste)
+    # ---------------------------
+    # LIMPIAR IDS PARA MATCH PERFECTO
+    # ---------------------------
+
     if "tx_transaction_id" in df.columns:
-        df["tx_transaction_id"] = pd.to_numeric(
-            df["tx_transaction_id"].astype(str).str.replace(",", "", regex=False),
-            errors="coerce"
+        df["tx_transaction_id"] = (
+            df["tx_transaction_id"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .str.strip()
         )
 
     if "sf_transaction_related_id" in df.columns:
-        df["sf_transaction_related_id"] = pd.to_numeric(
-            df["sf_transaction_related_id"].astype(str).str.replace(",", "", regex=False),
-            errors="coerce"
+        df["sf_transaction_related_id"] = (
+            df["sf_transaction_related_id"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .str.strip()
         )
 
     # eliminar duplicados
@@ -195,7 +202,7 @@ if archivo is not None:
     pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
     fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
 
-    # merge correcto usando id real del sistema
+    # merge usando IDs correctos
     comisiones = pagos.merge(
         fees[["sf_transaction_related_id", "tx_amount_comision"]],
         left_on="tx_transaction_id",
@@ -236,6 +243,10 @@ if archivo is not None:
 
     # total neto
     tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+
+    # asegurar tipos numéricos
+    tabla["tx_amount_pago"] = pd.to_numeric(tabla["tx_amount_pago"], errors="coerce")
+    tabla["comision"] = pd.to_numeric(tabla["comision"], errors="coerce")
 
     # ---------------------------
     # Resumen financiero
