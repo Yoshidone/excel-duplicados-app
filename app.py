@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import zipfile
 from io import BytesIO
@@ -13,7 +13,7 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
-# Exportar CSV (mucho más ligero)
+# Exportar CSV
 # ---------------------------
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -77,7 +77,17 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
+    if "tx_reference" not in df.columns:
+        st.error("No existe la columna tx_reference")
+        st.stop()
+
+    if "tx_amount" not in df.columns:
+        st.error("No existe la columna tx_amount")
+        st.stop()
+
+    # ---------------------------
     # eliminar duplicados
+    # ---------------------------
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
@@ -97,11 +107,9 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
-    # CON DUPLICADOS
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
-    # SIN DUPLICADOS
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -117,15 +125,45 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Descargas seguras
+    # Identificar PY y SF
+    # ---------------------------
+
+    pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+    fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+
+    total_pagos = len(pagos)
+    total_fees = len(fees)
+
+    # total comisión
+    comision_total = fees["tx_amount"].abs().sum()
+
+    # comisión por moneda
+    comision_pen = fees[fees["tx_currency_code"] == "PEN"]["tx_amount"].abs().sum()
+    comision_usd = fees[fees["tx_currency_code"] == "USD"]["tx_amount"].abs().sum()
+
+    st.subheader("Análisis de comisiones")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Transacciones (PY)", total_pagos)
+    c2.metric("Líneas de comisión (SF)", total_fees)
+    c3.metric("Comisión total", f"{comision_total:,.2f}")
+    c4.metric("Comisión PEN", f"{comision_pen:,.2f}")
+
+    st.metric("Comisión USD", f"{comision_usd:,.2f}")
+
+    st.divider()
+
+    # ---------------------------
+    # Descargas
     # ---------------------------
     st.subheader("Descargar resultados")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         st.download_button(
-            "Descargar base sin duplicados",
+            "Base sin duplicados",
             exportar_csv(df_sin_duplicados),
             "base_sin_duplicados.csv",
             mime="text/csv"
@@ -133,7 +171,7 @@ if archivo is not None:
 
     with c2:
         st.download_button(
-            "Descargar PEN",
+            "Registros PEN",
             exportar_csv(pen),
             "registros_pen.csv",
             mime="text/csv"
@@ -141,8 +179,16 @@ if archivo is not None:
 
     with c3:
         st.download_button(
-            "Descargar USD",
+            "Registros USD",
             exportar_csv(usd),
             "registros_usd.csv",
+            mime="text/csv"
+        )
+
+    with c4:
+        st.download_button(
+            "Solo comisiones (SF)",
+            exportar_csv(fees),
+            "comisiones_sf.csv",
             mime="text/csv"
         )
