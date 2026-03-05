@@ -13,7 +13,7 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
-# Exportar CSV
+# Exportar CSV (mucho más ligero)
 # ---------------------------
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -85,9 +85,7 @@ if archivo is not None:
         st.error("No existe la columna tx_amount")
         st.stop()
 
-    # ---------------------------
     # eliminar duplicados
-    # ---------------------------
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
@@ -107,9 +105,11 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
+    # CON DUPLICADOS
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
+    # SIN DUPLICADOS
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -134,10 +134,8 @@ if archivo is not None:
     total_pagos = len(pagos)
     total_fees = len(fees)
 
-    # total comisión
     comision_total = fees["tx_amount"].abs().sum()
 
-    # comisión por moneda
     comision_pen = fees[fees["tx_currency_code"] == "PEN"]["tx_amount"].abs().sum()
     comision_usd = fees[fees["tx_currency_code"] == "USD"]["tx_amount"].abs().sum()
 
@@ -155,7 +153,7 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Descargas
+    # Descargas seguras
     # ---------------------------
     st.subheader("Descargar resultados")
 
@@ -192,3 +190,40 @@ if archivo is not None:
             "comisiones_sf.csv",
             mime="text/csv"
         )
+
+    # ---------------------------
+    # NUEVO: Comisión por cliente
+    # ---------------------------
+
+    st.divider()
+    st.subheader("Comisión por cliente")
+
+    comisiones_cliente = pagos.merge(
+        fees[["psp_tin", "tx_amount"]],
+        on="psp_tin",
+        how="left",
+        suffixes=("_pago", "_comision")
+    )
+
+    comisiones_cliente["comision"] = comisiones_cliente["tx_amount_comision"].abs()
+
+    columnas_mostrar = [
+        "deb_nombre",
+        "deb_doc",
+        "tx_amount_pago",
+        "comision",
+        "tx_currency_code"
+    ]
+
+    columnas_existentes = [c for c in columnas_mostrar if c in comisiones_cliente.columns]
+
+    tabla_final = comisiones_cliente[columnas_existentes]
+
+    st.dataframe(tabla_final)
+
+    st.download_button(
+        "Descargar comisión por cliente",
+        exportar_csv(tabla_final),
+        "comisiones_por_cliente.csv",
+        mime="text/csv"
+    )
