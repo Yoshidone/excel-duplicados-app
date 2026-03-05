@@ -70,19 +70,37 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    # normalizar texto
+    if "psp_tin" not in df.columns:
+        st.error("No existe la columna psp_tin")
+        st.stop()
+
+    if "tx_currency_code" not in df.columns:
+        st.error("No existe la columna tx_currency_code")
+        st.stop()
+
+    # normalizar textos
     df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
     # convertir montos
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-    # convertir ids
+    # LIMPIAR IDS (esto arregla el problema de comisiones en 0)
     if "tx_transaction_id" in df.columns:
-        df["tx_transaction_id"] = pd.to_numeric(df["tx_transaction_id"], errors="coerce")
+        df["tx_transaction_id"] = (
+            df["tx_transaction_id"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .astype(float)
+        )
 
     if "sf_transaction_related_id" in df.columns:
-        df["sf_transaction_related_id"] = pd.to_numeric(df["sf_transaction_related_id"], errors="coerce")
+        df["sf_transaction_related_id"] = (
+            df["sf_transaction_related_id"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .astype(float)
+        )
 
     # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -181,10 +199,7 @@ if archivo is not None:
     pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
     fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
 
-    # ---------------------------
     # MERGE CORRECTO
-    # ---------------------------
-
     comisiones = pagos.merge(
         fees[["sf_transaction_related_id", "tx_amount_comision"]],
         left_on="tx_transaction_id",
