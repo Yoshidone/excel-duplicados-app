@@ -19,10 +19,8 @@ archivo = st.file_uploader(
 def leer_archivo(file):
     if file.name.endswith(".xlsx"):
         df = pd.read_excel(file)
-
     elif file.name.endswith(".csv"):
         df = pd.read_csv(file)
-
     return df
 
 
@@ -57,10 +55,11 @@ if archivo:
         df = leer_archivo(archivo)
 
     # ---------------------------
-    # LIMPIAR IDS (solo agregado)
+    # Limpiar TX_transaction_id
     # ---------------------------
 
     if "TX_transaction_id" in df.columns:
+
         df["TX_transaction_id"] = (
             df["TX_transaction_id"]
             .astype(str)
@@ -68,22 +67,15 @@ if archivo:
             .str.strip()
         )
 
-    if "SF_transaction_related_id" in df.columns:
-        df["SF_transaction_related_id"] = (
-            df["SF_transaction_related_id"]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.strip()
-        )
-
     # ---------------------------
-    # Merge usando IDs correctos
+    # Merge correcto
+    # SOLO CAMBIO AQUÍ
     # ---------------------------
 
-    if "TX_transaction_id" in df.columns and "SF_transaction_related_id" in df.columns:
+    if "SF_transaction_related_id" in df.columns and "TX_transaction_id" in df.columns:
 
         df = df.merge(
-            df[["TX_transaction_id","TX_amount"]],
+            df[["TX_transaction_id", "TX_amount"]],
             left_on="SF_transaction_related_id",
             right_on="TX_transaction_id",
             how="left",
@@ -93,8 +85,7 @@ if archivo:
         df["tx_amount_pago"] = df["TX_amount_tx"]
 
     # ---------------------------
-    # AQUÍ SIGUE TU LÓGICA ORIGINAL
-    # (comisiones variables)
+    # Resumen financiero
     # ---------------------------
 
     st.subheader("Resumen financiero")
@@ -109,17 +100,42 @@ if archivo:
     col2.metric("Total comisiones", round(total_comision,2))
     col3.metric("Total neto", round(total_neto,2))
 
+    # ---------------------------
+    # Mostrar tabla
+    # ---------------------------
+
     st.dataframe(df)
 
     # ---------------------------
-    # Descargar
+    # Separar por moneda
     # ---------------------------
 
-    csv = df.to_csv(index=False).encode("utf-8")
+    if "TX_currency_code" in df.columns:
 
-    st.download_button(
-        "Descargar resultado",
-        csv,
-        "resultado_financiero.csv",
-        "text/csv"
-    )
+        soles = df[df["TX_currency_code"] == "PEN"]
+        dolares = df[df["TX_currency_code"] == "USD"]
+
+        st.subheader("Transacciones PEN")
+        st.dataframe(soles)
+
+        st.subheader("Transacciones USD")
+        st.dataframe(dolares)
+
+        csv_soles = soles.to_csv(index=False).encode("utf-8")
+        csv_dolares = dolares.to_csv(index=False).encode("utf-8")
+
+        col1, col2 = st.columns(2)
+
+        col1.download_button(
+            "Descargar PEN",
+            csv_soles,
+            "transacciones_pen.csv",
+            "text/csv"
+        )
+
+        col2.download_button(
+            "Descargar USD",
+            csv_dolares,
+            "transacciones_usd.csv",
+            "text/csv"
+        )
