@@ -69,22 +69,20 @@ if archivo is not None:
     df.columns = df.columns.str.lower().str.strip()
 
     # ---------------------------
-    # DETECTAR TIPO OPERACION
+    # DETECTAR TIPO OPERACION (Basado en OP_AMOUNT)
     # ---------------------------
 
     df["tipo_operacion"] = "OTRO"
+    
+    # Convertimos OP_AMOUNT a numérico por seguridad
+    if "op_amount" in df.columns:
+        df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce").fillna(0)
 
-    if "tx_reference" in df.columns:
-        df.loc[
-            df["tx_reference"].astype(str).str.upper().str.startswith("PY", na=False),
-            "tipo_operacion"
-        ] = "PAGO"
+        # REGLA: OP_AMOUNT POSITIVO = PAGO (TOTAL)
+        df.loc[df["op_amount"] > 0, "tipo_operacion"] = "PAGO"
 
-    if "op_operation_no" in df.columns:
-        df.loc[
-            df["op_operation_no"].astype(str).str.upper().str.startswith("SF", na=False),
-            "tipo_operacion"
-        ] = "COMISION"
+        # REGLA: OP_AMOUNT NEGATIVO = COMISION
+        df.loc[df["op_amount"] < 0, "tipo_operacion"] = "COMISION"
 
     st.success("Archivo cargado correctamente")
 
@@ -192,30 +190,25 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "tx_reference" in df.columns and "tx_amount" in df.columns:
+    if "tx_reference" in df.columns and "op_amount" in df.columns:
 
-        pagos = df[df["tipo_operacion"] == "PAGO"]
-        fees = df[df["tipo_operacion"] == "COMISION"]
+        # Separamos usando OP_AMOUNT para asegurar que nada sea 0
+        pagos = df[df["tipo_operacion"] == "PAGO"][["psp_tin", "op_amount"]].rename(columns={"op_amount": "tx_amount_pago"})
+        fees = df[df["tipo_operacion"] == "COMISION"][["psp_tin", "op_amount"]].rename(columns={"op_amount": "tx_amount_comision"})
 
-        comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
-            how="left",
-            suffixes=("_pago", "_comision")
-        )
+        # MERGE OUTER para unir ambas filas por PSP_TIN
+        comisiones = pd.merge(pagos, fees, on="psp_tin", how="outer")
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(
-            comisiones["tx_amount_pago"], errors="coerce"
-        )
-
-        comisiones["tx_amount_comision"] = pd.to_numeric(
-            comisiones["tx_amount_comision"], errors="coerce"
-        )
+        comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].fillna(0)
+        comisiones["tx_amount_comision"] = comisiones["tx_amount_comision"].fillna(0)
 
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        comisiones["comision_contrato"] = (
-            (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
+        # Calculamos contrato
+        comisiones["comision_contrato"] = 0.0
+        mask = comisiones["tx_amount_pago"] > 0
+        comisiones.loc[mask, "comision_contrato"] = (
+            (comisiones.loc[mask, "tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
         )
 
@@ -239,7 +232,10 @@ if archivo is not None:
         ]
 
         tabla = tabla.fillna(0)
-
+        
+        # Filtramos para mostrar solo donde hubo una venta real
+        tabla = tabla[tabla["tx_amount_pago"] > 0]
+        
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
         st.dataframe(tabla)
@@ -248,15 +244,15 @@ if archivo is not None:
 
         c1, c2 = st.columns(2)
 
-        c1.metric("Total comisiones analizadas", len(tabla))
+        c1.metric("Total transacciones analizadas", len(tabla))
 
         c2.metric(
-            "Comisiones que NO coinciden",
+            "Diferencias detectadas",
             len(tabla[tabla["diferencia"] != 0])
         )
 
         st.download_button(
-            "Descargar comparación de comisiones",
+            "Descargar reporte de comparación",
             exportar_csv(tabla),
             "comparacion_comisiones.csv",
             mime="text/csv"
