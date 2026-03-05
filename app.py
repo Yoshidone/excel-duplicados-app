@@ -145,7 +145,7 @@ if archivo is not None:
         )
 
 # ===================================================
-# COMPARACIÓN FINANCIERA
+# COMPARACIÓN DE COMISIONES
 # ===================================================
 
     st.divider()
@@ -166,11 +166,11 @@ if archivo is not None:
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
 # ---------------------------------------------------
-# PAGOS (montos positivos)
+# PAGOS (PY)
 # ---------------------------------------------------
 
     pagos = (
-        df[df["op_amount"] > 0]
+        df[df["op_operation_no"].str.startswith("PY", na=False)]
         .groupby("psp_tin", as_index=False)["op_amount"]
         .sum()
     )
@@ -178,11 +178,11 @@ if archivo is not None:
     pagos = pagos.rename(columns={"op_amount": "tx_amount_pago"})
 
 # ---------------------------------------------------
-# COMISIONES (montos negativos)
+# COMISIONES (SF)
 # ---------------------------------------------------
 
     comisiones = (
-        df[df["op_amount"] < 0]
+        df[df["tx_reference"].str.startswith("SF", na=False)]
         .groupby("psp_tin", as_index=False)["op_amount"]
         .sum()
     )
@@ -192,10 +192,17 @@ if archivo is not None:
     comisiones = comisiones.rename(columns={"op_amount": "comision"})
 
 # ---------------------------------------------------
+# LISTA COMPLETA DE PSP
+# ---------------------------------------------------
+
+    todos_psp = df[["psp_tin"]].drop_duplicates()
+
+# ---------------------------------------------------
 # MERGE
 # ---------------------------------------------------
 
-    tabla = pagos.merge(comisiones, on="psp_tin", how="left")
+    tabla = todos_psp.merge(pagos, on="psp_tin", how="left") \
+                     .merge(comisiones, on="psp_tin", how="left")
 
     tabla = tabla.fillna(0)
 
