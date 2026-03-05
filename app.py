@@ -70,23 +70,22 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    if "invoice_public_id" not in df.columns:
-        st.error("No existe la columna invoice_public_id")
-        st.stop()
-
-    if "tx_currency_code" not in df.columns:
-        st.error("No existe la columna tx_currency_code")
-        st.stop()
-
     # normalizar texto
-    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
     df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
+    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
     # convertir montos
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-    # eliminar duplicados por factura
-    df_sin_duplicados = df.drop_duplicates(subset="invoice_public_id")
+    # convertir ids
+    if "tx_transaction_id" in df.columns:
+        df["tx_transaction_id"] = pd.to_numeric(df["tx_transaction_id"], errors="coerce")
+
+    if "sf_transaction_related_id" in df.columns:
+        df["sf_transaction_related_id"] = pd.to_numeric(df["sf_transaction_related_id"], errors="coerce")
+
+    # eliminar duplicados
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
     # Dashboard
@@ -97,7 +96,7 @@ if archivo is not None:
 
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
-    c3.metric("Facturas únicas", len(df_sin_duplicados))
+    c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
     st.divider()
 
@@ -178,15 +177,22 @@ if archivo is not None:
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
     fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
 
-    # merge usando invoice_public_id
+    # renombrar montos
+    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
+    fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
+
+    # ---------------------------
+    # MERGE CORRECTO
+    # ---------------------------
+
     comisiones = pagos.merge(
-        fees[["invoice_public_id", "tx_amount"]],
-        on="invoice_public_id",
-        how="left",
-        suffixes=("_pago", "_comision")
+        fees[["sf_transaction_related_id", "tx_amount_comision"]],
+        left_on="tx_transaction_id",
+        right_on="sf_transaction_related_id",
+        how="left"
     )
 
-    # comisión real del sistema
+    # comisión real
     comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
     # comisión contrato
@@ -207,7 +213,7 @@ if archivo is not None:
 
     tabla = comisiones[
         [
-            "invoice_public_id",
+            "psp_tin",
             "tx_amount_pago",
             "comision",
             "comision_contrato",
