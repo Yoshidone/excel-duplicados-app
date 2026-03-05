@@ -17,10 +17,13 @@ archivo = st.file_uploader(
 # ---------------------------
 
 def leer_archivo(file):
+
     if file.name.endswith(".xlsx"):
         df = pd.read_excel(file)
+
     elif file.name.endswith(".csv"):
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, sep=None, engine="python")
+
     return df
 
 
@@ -38,15 +41,20 @@ if archivo:
 
             for nombre in z.namelist():
 
-                if nombre.endswith(".csv"):
-                    with z.open(nombre) as f:
-                        df = pd.read_csv(f)
-                        dfs.append(df)
+                try:
 
-                elif nombre.endswith(".xlsx"):
-                    with z.open(nombre) as f:
-                        df = pd.read_excel(f)
-                        dfs.append(df)
+                    if nombre.endswith(".csv"):
+                        with z.open(nombre) as f:
+                            df = pd.read_csv(f, sep=None, engine="python")
+                            dfs.append(df)
+
+                    elif nombre.endswith(".xlsx"):
+                        with z.open(nombre) as f:
+                            df = pd.read_excel(f)
+                            dfs.append(df)
+
+                except:
+                    pass
 
         df = pd.concat(dfs, ignore_index=True)
 
@@ -55,7 +63,7 @@ if archivo:
         df = leer_archivo(archivo)
 
     # ---------------------------
-    # Limpiar TX_transaction_id
+    # LIMPIAR COMAS DEL ID
     # ---------------------------
 
     if "TX_transaction_id" in df.columns:
@@ -68,8 +76,9 @@ if archivo:
         )
 
     # ---------------------------
-    # Merge correcto
-    # SOLO CAMBIO AQUÍ
+    # CAMBIO IMPORTANTE
+    # antes usaba psp_tin
+    # ahora usa SF_transaction_related_id
     # ---------------------------
 
     if "SF_transaction_related_id" in df.columns and "TX_transaction_id" in df.columns:
@@ -85,7 +94,7 @@ if archivo:
         df["tx_amount_pago"] = df["TX_amount_tx"]
 
     # ---------------------------
-    # Resumen financiero
+    # RESUMEN FINANCIERO
     # ---------------------------
 
     st.subheader("Resumen financiero")
@@ -101,13 +110,13 @@ if archivo:
     col3.metric("Total neto", round(total_neto,2))
 
     # ---------------------------
-    # Mostrar tabla
+    # CUADRO FINAL
     # ---------------------------
 
     st.dataframe(df)
 
     # ---------------------------
-    # Separar por moneda
+    # SEPARAR POR MONEDA
     # ---------------------------
 
     if "TX_currency_code" in df.columns:
