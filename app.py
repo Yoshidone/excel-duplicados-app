@@ -15,14 +15,12 @@ archivo = st.file_uploader(
 # ---------------------------
 # Exportar CSV
 # ---------------------------
-
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 # ---------------------------
 # Leer CSV
 # ---------------------------
-
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
@@ -35,7 +33,6 @@ def leer_csv_seguro(f):
 # ---------------------------
 # Cargar archivo
 # ---------------------------
-
 @st.cache_data
 def cargar_archivo(file):
 
@@ -63,9 +60,8 @@ def cargar_archivo(file):
 
 
 # ---------------------------
-# Procesar archivo
+# Procesar
 # ---------------------------
-
 if archivo is not None:
 
     with st.spinner("Procesando archivo..."):
@@ -77,10 +73,9 @@ if archivo is not None:
 
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-# ---------------------------
-# DASHBOARD
-# ---------------------------
-
+    # ---------------------------
+    # Dashboard
+    # ---------------------------
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -91,10 +86,9 @@ if archivo is not None:
 
     st.divider()
 
-# ---------------------------
-# Separación por moneda
-# ---------------------------
-
+    # ---------------------------
+    # Separación por moneda
+    # ---------------------------
     pen = df[df["tx_currency_code"] == "PEN"]
     usd = df[df["tx_currency_code"] == "USD"]
 
@@ -107,10 +101,9 @@ if archivo is not None:
 
     st.divider()
 
-# ---------------------------
-# Descargas
-# ---------------------------
-
+    # ---------------------------
+    # Descargas
+    # ---------------------------
     st.subheader("Descargar resultados")
 
     c1, c2 = st.columns(2)
@@ -153,7 +146,7 @@ if archivo is not None:
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
 # ---------------------------
-# PAGOS (PY)
+# PAGOS
 # ---------------------------
 
     pagos = (
@@ -166,7 +159,7 @@ if archivo is not None:
     pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
 
 # ---------------------------
-# COMISIONES (SF)
+# COMISIONES
 # ---------------------------
 
     comisiones = (
@@ -179,13 +172,13 @@ if archivo is not None:
     comisiones = comisiones.rename(columns={"tx_amount": "comision"})
 
 # ---------------------------
-# UNIR PAGOS + COMISIONES
+# MERGE
 # ---------------------------
 
-    tabla = pagos.merge(comisiones, on="psp_tin", how="outer")
+    tabla = pagos.merge(comisiones, on="psp_tin", how="left")
 
-    tabla["tx_amount_pago"] = tabla["tx_amount_pago"].fillna(0)
-    tabla["comision"] = tabla["comision"].fillna(0)
+# Aquí es donde aparecen los None
+# porque hay pagos sin comisión
 
 # ---------------------------
 # comisión contrato
@@ -210,13 +203,13 @@ if archivo is not None:
     ).round(2)
 
 # ---------------------------
-# total neto
+# neto
 # ---------------------------
 
     tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
 # ---------------------------
-# RESUMEN
+# Resumen
 # ---------------------------
 
     total_pagos = tabla["tx_amount_pago"].sum()
