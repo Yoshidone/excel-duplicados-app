@@ -21,7 +21,7 @@ porcentaje_contrato = st.number_input(
 
 fee_fijo = st.number_input(
     "Fee fijo",
-    value=0.90,
+    value=0.00,
     step=0.01
 )
 
@@ -33,13 +33,14 @@ archivo = st.file_uploader(
 # ---------------------------
 # Exportar CSV
 # ---------------------------
+
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
-
 
 # ---------------------------
 # Leer CSV
 # ---------------------------
+
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
@@ -49,10 +50,10 @@ def leer_csv_seguro(f):
             continue
     raise ValueError("No se pudo leer el CSV")
 
-
 # ---------------------------
 # Cargar archivo
 # ---------------------------
+
 @st.cache_data
 def cargar_archivo(file):
 
@@ -62,6 +63,7 @@ def cargar_archivo(file):
         df = leer_csv_seguro(file)
 
     elif nombre.endswith(".zip"):
+
         with zipfile.ZipFile(file) as z:
 
             archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
@@ -77,10 +79,10 @@ def cargar_archivo(file):
 
     return df
 
-
 # ---------------------------
 # Procesar archivo
 # ---------------------------
+
 if archivo is not None:
 
     with st.spinner("Procesando archivo..."):
@@ -109,11 +111,13 @@ if archivo is not None:
     # ---------------------------
     # eliminar duplicados
     # ---------------------------
+
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
     # Dashboard general
     # ---------------------------
+
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -236,25 +240,24 @@ if archivo is not None:
 
     comisiones_cliente["comision"] = comisiones_cliente["tx_amount_comision"].abs()
 
-    # evitar valores nulos
     comisiones_cliente["comision"] = comisiones_cliente["comision"].fillna(0)
 
-    # porcentaje real
     comisiones_cliente["porcentaje_comision"] = (
         (comisiones_cliente["comision"] /
         comisiones_cliente["tx_amount_pago"]) * 100
     ).round(2)
 
     # ---------------------------
-    # comisión según contrato
+    # Comisión contrato
     # ---------------------------
 
     comisiones_cliente["comision_contrato"] = (
-        (comisiones_cliente["tx_amount_pago"] * (porcentaje_contrato / 100))
+        (comisiones_cliente["tx_amount_pago"].fillna(0) * (porcentaje_contrato / 100))
         + fee_fijo
     ).round(2)
 
     # diferencia
+
     comisiones_cliente["diferencia"] = (
         comisiones_cliente["comision"] -
         comisiones_cliente["comision_contrato"]
