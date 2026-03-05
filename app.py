@@ -13,138 +13,250 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
-# Leer archivo
+# Exportar CSV
 # ---------------------------
+def exportar_csv(df):
+    return df.to_csv(index=False).encode("utf-8")
 
-def leer_archivo(file):
+# ---------------------------
+# Leer CSV
+# ---------------------------
+def leer_csv_seguro(f):
+    for sep in [",", ";"]:
+        try:
+            f.seek(0)
+            return pd.read_csv(f, sep=sep, low_memory=False)
+        except:
+            continue
+    raise ValueError("No se pudo leer el CSV")
 
-    if file.name.endswith(".xlsx"):
+# ---------------------------
+# Cargar archivo
+# ---------------------------
+@st.cache_data
+def cargar_archivo(file):
+
+    nombre = file.name.lower()
+
+    if nombre.endswith(".csv"):
+        df = leer_csv_seguro(file)
+
+    elif nombre.endswith(".zip"):
+
+        with zipfile.ZipFile(file) as z:
+
+            archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
+
+            if not archivos_csv:
+                raise ValueError("El ZIP no contiene CSV")
+
+            with z.open(archivos_csv[0]) as f:
+                df = leer_csv_seguro(f)
+
+    else:
         df = pd.read_excel(file)
-
-    elif file.name.endswith(".csv"):
-        df = pd.read_csv(file, sep=None, engine="python")
 
     return df
 
 
-if archivo:
+# ---------------------------
+# Procesar
+# ---------------------------
+if archivo is not None:
 
-    dfs = []
+    with st.spinner("Procesando archivo..."):
+        df = cargar_archivo(archivo)
 
-    # ---------------------------
-    # Leer ZIP
-    # ---------------------------
+    df.columns = df.columns.str.lower().str.strip()
 
-    if archivo.name.endswith(".zip"):
+    st.success("Archivo cargado correctamente")
 
-        with zipfile.ZipFile(archivo) as z:
+    if "psp_tin" not in df.columns:
+        st.error("No existe la columna psp_tin")
+        st.stop()
 
-            for nombre in z.namelist():
+    if "tx_currency_code" not in df.columns:
+        st.error("No existe la columna tx_currency_code")
+        st.stop()
 
-                try:
+    # normalizar texto
+    df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
+    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
-                    if nombre.endswith(".csv"):
-                        with z.open(nombre) as f:
-                            df = pd.read_csv(f, sep=None, engine="python")
-                            dfs.append(df)
+    # convertir montos
+    df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
-                    elif nombre.endswith(".xlsx"):
-                        with z.open(nombre) as f:
-                            df = pd.read_excel(f)
-                            dfs.append(df)
-
-                except:
-                    pass
-
-        df = pd.concat(dfs, ignore_index=True)
-
-    else:
-
-        df = leer_archivo(archivo)
-
-    # ---------------------------
-    # LIMPIAR COMAS DEL ID
-    # ---------------------------
-
-    if "TX_transaction_id" in df.columns:
-
-        df["TX_transaction_id"] = (
-            df["TX_transaction_id"]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.strip()
+    # limpiar ids de transacción (soluciona el error que viste)
+    if "tx_transaction_id" in df.columns:
+        df["tx_transaction_id"] = pd.to_numeric(
+            df["tx_transaction_id"].astype(str).str.replace(",", "", regex=False),
+            errors="coerce"
         )
 
-    # ---------------------------
-    # CAMBIO IMPORTANTE
-    # antes usaba psp_tin
-    # ahora usa SF_transaction_related_id
-    # ---------------------------
-
-    if "SF_transaction_related_id" in df.columns and "TX_transaction_id" in df.columns:
-
-        df = df.merge(
-            df[["TX_transaction_id", "TX_amount"]],
-            left_on="SF_transaction_related_id",
-            right_on="TX_transaction_id",
-            how="left",
-            suffixes=("","_tx")
+    if "sf_transaction_related_id" in df.columns:
+        df["sf_transaction_related_id"] = pd.to_numeric(
+            df["sf_transaction_related_id"].astype(str).str.replace(",", "", regex=False),
+            errors="coerce"
         )
 
-        df["tx_amount_pago"] = df["TX_amount_tx"]
+    # eliminar duplicados
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
-    # RESUMEN FINANCIERO
+    # Dashboard general
     # ---------------------------
+    st.subheader("Dashboard financiero")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Total registros", len(df))
+    c2.metric("Columnas", len(df.columns))
+    c3.metric("Registros sin duplicados", len(df_sin_duplicados))
+
+    st.divider()
+
+    # ---------------------------
+    # Separación por moneda
+    # ---------------------------
+
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
+
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
+
+    st.subheader("Separación por moneda")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("PEN totales (con duplicados)", len(pen_total))
+    c2.metric("USD totales (con duplicados)", len(usd_total))
+    c3.metric("PEN sin duplicados", len(pen))
+    c4.metric("USD sin duplicados", len(usd))
+
+    st.divider()
+
+    # ---------------------------
+    # Descargas
+    # ---------------------------
+    st.subheader("Descargar resultados")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.download_button(
+            "Descargar base sin duplicados",
+            exportar_csv(df_sin_duplicados),
+            "base_sin_duplicados.csv",
+            mime="text/csv"
+        )
+
+    with c2:
+        st.download_button(
+            "Descargar PEN",
+            exportar_csv(pen),
+            "registros_pen.csv",
+            mime="text/csv"
+        )
+
+    with c3:
+        st.download_button(
+            "Descargar USD",
+            exportar_csv(usd),
+            "registros_usd.csv",
+            mime="text/csv"
+        )
+
+# ==================================================
+# Comparación de comisiones
+# ==================================================
+
+    st.divider()
+    st.subheader("Comparación de comisiones")
+
+    porcentaje_contrato = st.number_input(
+        "Porcentaje comisión (%)",
+        value=2.30,
+        step=0.01
+    )
+
+    fee_fijo = st.number_input(
+        "Fee fijo",
+        value=0.90,
+        step=0.01
+    )
+
+    aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
+
+    # separar pagos y comisiones
+    pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
+    fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+
+    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
+    fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
+
+    # merge correcto usando id real del sistema
+    comisiones = pagos.merge(
+        fees[["sf_transaction_related_id", "tx_amount_comision"]],
+        left_on="tx_transaction_id",
+        right_on="sf_transaction_related_id",
+        how="left"
+    )
+
+    # comisión real
+    comisiones["comision"] = comisiones["tx_amount_comision"].abs()
+
+    # comisión contrato
+    comisiones["comision_contrato"] = (
+        (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
+        + fee_fijo
+    )
+
+    if aplicar_igv:
+        comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+
+    comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
+
+    # diferencia
+    comisiones["diferencia"] = (
+        comisiones["comision"] - comisiones["comision_contrato"]
+    ).round(2)
+
+    tabla = comisiones[
+        [
+            "psp_tin",
+            "tx_amount_pago",
+            "comision",
+            "comision_contrato",
+            "diferencia"
+        ]
+    ]
+
+    tabla = tabla.fillna(0)
+
+    # total neto
+    tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+
+    # ---------------------------
+    # Resumen financiero
+    # ---------------------------
+    total_pagos = tabla["tx_amount_pago"].sum()
+    total_comisiones = tabla["comision"].sum()
+    total_neto = tabla["total_neto"].sum()
 
     st.subheader("Resumen financiero")
 
-    total_pago = df["tx_amount_pago"].sum()
-    total_comision = df["comision"].sum()
-    total_neto = df["total_neto"].sum()
+    c1, c2, c3 = st.columns(3)
 
-    col1,col2,col3 = st.columns(3)
+    c1.metric("Total pagos", round(total_pagos, 2))
+    c2.metric("Total comisiones", round(total_comisiones, 2))
+    c3.metric("Total neto", round(total_neto, 2))
 
-    col1.metric("Total pagos", round(total_pago,2))
-    col2.metric("Total comisiones", round(total_comision,2))
-    col3.metric("Total neto", round(total_neto,2))
+    st.dataframe(tabla)
 
-    # ---------------------------
-    # CUADRO FINAL
-    # ---------------------------
-
-    st.dataframe(df)
-
-    # ---------------------------
-    # SEPARAR POR MONEDA
-    # ---------------------------
-
-    if "TX_currency_code" in df.columns:
-
-        soles = df[df["TX_currency_code"] == "PEN"]
-        dolares = df[df["TX_currency_code"] == "USD"]
-
-        st.subheader("Transacciones PEN")
-        st.dataframe(soles)
-
-        st.subheader("Transacciones USD")
-        st.dataframe(dolares)
-
-        csv_soles = soles.to_csv(index=False).encode("utf-8")
-        csv_dolares = dolares.to_csv(index=False).encode("utf-8")
-
-        col1, col2 = st.columns(2)
-
-        col1.download_button(
-            "Descargar PEN",
-            csv_soles,
-            "transacciones_pen.csv",
-            "text/csv"
-        )
-
-        col2.download_button(
-            "Descargar USD",
-            csv_dolares,
-            "transacciones_usd.csv",
-            "text/csv"
-        )
+    st.download_button(
+        "Descargar comparación de comisiones",
+        exportar_csv(tabla),
+        "comparacion_comisiones.csv",
+        mime="text/csv"
+    )
