@@ -154,7 +154,7 @@ if archivo is not None:
         )
 
 # ==================================================
-# ANALISIS DE COMISIONES
+# ANALISIS DE COMISIONES (TU CÓDIGO ORIGINAL)
 # ==================================================
 
     st.divider()
@@ -186,7 +186,6 @@ if archivo is not None:
             suffixes=("_pago", "_comision")
         )
 
-        # convertir a número
         comisiones["tx_amount_pago"] = pd.to_numeric(
             comisiones["tx_amount_pago"], errors="coerce"
         )
@@ -195,10 +194,8 @@ if archivo is not None:
             comisiones["tx_amount_comision"], errors="coerce"
         )
 
-        # comisión real
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        # comisión contrato
         comisiones["comision_contrato"] = (
             (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
@@ -209,7 +206,6 @@ if archivo is not None:
 
         comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
 
-        # diferencia
         comisiones["diferencia"] = (
             comisiones["comision"] - comisiones["comision_contrato"]
         ).round(2)
@@ -224,10 +220,8 @@ if archivo is not None:
             ]
         ]
 
-        # eliminar vacíos
         tabla = tabla.fillna(0)
 
-        # total neto
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
         st.dataframe(tabla)
@@ -248,4 +242,70 @@ if archivo is not None:
             exportar_csv(tabla),
             "comparacion_comisiones.csv",
             mime="text/csv"
+        )
+
+# ==================================================
+# NUEVA TABLA UNIFICADA PY + SF (LO QUE PEDISTE)
+# ==================================================
+
+    st.divider()
+    st.subheader("Base unificada de pagos y comisiones")
+
+    if "tx_reference" in df.columns and "op_amount" in df.columns:
+
+        df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce")
+
+        py = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
+        sf = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+
+        py = py.rename(columns={
+            "tx_reference": "py_codigo",
+            "op_amount": "recaudo"
+        })
+
+        sf = sf.rename(columns={
+            "tx_reference": "sf_codigo",
+            "op_amount": "comision"
+        })
+
+        sf["comision"] = sf["comision"].abs()
+
+        tabla_unificada = py.merge(
+            sf[["psp_tin", "sf_codigo", "comision"]],
+            on="psp_tin",
+            how="left"
+        )
+
+        tabla_unificada = tabla_unificada[
+            [
+                "psp_tin",
+                "tx_transaction_id",
+                "py_codigo",
+                "sf_codigo",
+                "tx_currency_code",
+                "recaudo",
+                "comision"
+            ]
+        ]
+
+        tabla_unificada = tabla_unificada.rename(columns={
+            "psp_tin": "PSP_TIN",
+            "tx_transaction_id": "TX_Transaction_Id",
+            "tx_currency_code": "Currency",
+            "recaudo": "Recaudo",
+            "comision": "Comision"
+        })
+
+        st.dataframe(tabla_unificada)
+
+        output = BytesIO()
+
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            tabla_unificada.to_excel(writer, index=False, sheet_name="base_unificada")
+
+        st.download_button(
+            "Descargar base unificada",
+            output.getvalue(),
+            "base_unificada.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
