@@ -8,20 +8,20 @@ st.set_page_config(page_title="Analizador Financiero", layout="wide")
 st.title("Analizador Financiero de Bases")
 
 # ---------------------------
-# Parámetros de comisión contrato
+# Parámetros de comisión
 # ---------------------------
 
 st.subheader("Parámetros de comisión contrato")
 
 porcentaje_contrato = st.number_input(
     "Porcentaje comisión (%)",
-    value=2.30,
+    value=1.90,
     step=0.01
 )
 
 fee_fijo = st.number_input(
     "Fee fijo",
-    value=0.00,
+    value=0.90,
     step=0.01
 )
 
@@ -38,7 +38,7 @@ def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 # ---------------------------
-# Leer CSV
+# Leer CSV seguro
 # ---------------------------
 
 def leer_csv_seguro(f):
@@ -92,12 +92,9 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
+    # Validaciones
     if "psp_tin" not in df.columns:
         st.error("No existe la columna psp_tin")
-        st.stop()
-
-    if "tx_currency_code" not in df.columns:
-        st.error("No existe la columna tx_currency_code")
         st.stop()
 
     if "tx_reference" not in df.columns:
@@ -108,8 +105,12 @@ if archivo is not None:
         st.error("No existe la columna tx_amount")
         st.stop()
 
+    if "tx_currency_code" not in df.columns:
+        st.error("No existe la columna tx_currency_code")
+        st.stop()
+
     # ---------------------------
-    # eliminar duplicados
+    # Eliminar duplicados
     # ---------------------------
 
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -150,7 +151,7 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Identificar PY y SF
+    # Identificar pagos y comisiones
     # ---------------------------
 
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
@@ -177,10 +178,7 @@ if archivo is not None:
 
     volumen_total = pagos["tx_amount"].abs().sum()
 
-    if volumen_total > 0:
-        porcentaje_comision = (comision_total / volumen_total) * 100
-    else:
-        porcentaje_comision = 0
+    porcentaje_comision = (comision_total / volumen_total) * 100
 
     st.subheader("Análisis de revenue")
 
@@ -193,42 +191,9 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Descargas
-    # ---------------------------
-
-    st.subheader("Descargar resultados")
-
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.download_button(
-            "Base sin duplicados",
-            exportar_csv(df_sin_duplicados),
-            "base_sin_duplicados.csv",
-            mime="text/csv"
-        )
-
-    with c2:
-        st.download_button(
-            "Registros PEN",
-            exportar_csv(pen),
-            "registros_pen.csv",
-            mime="text/csv"
-        )
-
-    with c3:
-        st.download_button(
-            "Registros USD",
-            exportar_csv(usd),
-            "registros_usd.csv",
-            mime="text/csv"
-        )
-
-    # ---------------------------
     # Comisión por cliente
     # ---------------------------
 
-    st.divider()
     st.subheader("Comisión por cliente")
 
     comisiones_cliente = pagos.merge(
@@ -238,26 +203,16 @@ if archivo is not None:
         suffixes=("_pago", "_comision")
     )
 
+    # comisión real
     comisiones_cliente["comision"] = comisiones_cliente["tx_amount_comision"].abs()
 
-    comisiones_cliente["comision"] = comisiones_cliente["comision"].fillna(0)
-
-    comisiones_cliente["porcentaje_comision"] = (
-        (comisiones_cliente["comision"] /
-        comisiones_cliente["tx_amount_pago"]) * 100
-    ).round(2)
-
-    # ---------------------------
-    # Comisión contrato
-    # ---------------------------
-
+    # comisión contrato
     comisiones_cliente["comision_contrato"] = (
-        (comisiones_cliente["tx_amount_pago"].fillna(0) * (porcentaje_contrato / 100))
+        (comisiones_cliente["tx_amount_pago"] * (porcentaje_contrato / 100))
         + fee_fijo
     ).round(2)
 
     # diferencia
-
     comisiones_cliente["diferencia"] = (
         comisiones_cliente["comision"] -
         comisiones_cliente["comision_contrato"]
@@ -268,7 +223,6 @@ if archivo is not None:
         "deb_doc",
         "tx_amount_pago",
         "comision",
-        "porcentaje_comision",
         "comision_contrato",
         "diferencia",
         "tx_currency_code"
