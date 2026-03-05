@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import zipfile
+from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
@@ -65,6 +66,7 @@ if archivo is not None:
     with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
+    # normalizar columnas
     df.columns = df.columns.str.lower().str.strip()
 
     st.success("Archivo cargado correctamente")
@@ -76,6 +78,13 @@ if archivo is not None:
     if "tx_currency_code" not in df.columns:
         st.error("No existe la columna tx_currency_code")
         st.stop()
+
+    # corregir formato de moneda
+    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
+
+    # corregir referencia
+    if "tx_reference" in df.columns:
+        df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
     # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -97,11 +106,11 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
-    pen_total = df[df["tx_currency_code"] == "pen"]
-    usd_total = df[df["tx_currency_code"] == "usd"]
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
 
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "pen"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "usd"]
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
     st.subheader("Separación por moneda")
 
@@ -168,15 +177,23 @@ if archivo is not None:
 
     if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-        pagos = df[df["tx_reference"].str.startswith("py", na=False)]
-        fees = df[df["tx_reference"].str.startswith("sf", na=False)]
+        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-        # unir pagos con comisiones
         comisiones = pagos.merge(
             fees[["psp_tin", "tx_amount"]],
             on="psp_tin",
             how="left",
             suffixes=("_pago", "_comision")
+        )
+
+        # convertir a número
+        comisiones["tx_amount_pago"] = pd.to_numeric(
+            comisiones["tx_amount_pago"], errors="coerce"
+        )
+
+        comisiones["tx_amount_comision"] = pd.to_numeric(
+            comisiones["tx_amount_comision"], errors="coerce"
         )
 
         # comisión real
@@ -210,6 +227,7 @@ if archivo is not None:
 
         st.dataframe(tabla)
 
+        # control
         st.subheader("Control de comisiones")
 
         c1, c2 = st.columns(2)
