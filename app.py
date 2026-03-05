@@ -153,6 +153,27 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
+    # NUEVO: Análisis de revenue
+    # ---------------------------
+
+    volumen_total = pagos["tx_amount"].abs().sum()
+
+    if volumen_total > 0:
+        porcentaje_comision = (comision_total / volumen_total) * 100
+    else:
+        porcentaje_comision = 0
+
+    st.subheader("Análisis de revenue")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Volumen total procesado", f"{volumen_total:,.2f}")
+    c2.metric("Comisiones totales", f"{comision_total:,.2f}")
+    c3.metric("% promedio comisión", f"{porcentaje_comision:.2f}%")
+
+    st.divider()
+
+    # ---------------------------
     # Descargas seguras
     # ---------------------------
     st.subheader("Descargar resultados")
