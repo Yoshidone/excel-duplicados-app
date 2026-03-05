@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import zipfile
-from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 
@@ -59,7 +58,7 @@ def cargar_archivo(file):
 
 
 # ---------------------------
-# Procesar
+# PROCESAR
 # ---------------------------
 if archivo is not None:
 
@@ -82,7 +81,7 @@ if archivo is not None:
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
-    # Dashboard general
+    # Dashboard
     # ---------------------------
     st.subheader("Dashboard financiero")
 
@@ -98,11 +97,11 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
-    pen_total = df[df["tx_currency_code"] == "PEN"]
-    usd_total = df[df["tx_currency_code"] == "USD"]
+    pen_total = df[df["tx_currency_code"] == "pen"]
+    usd_total = df[df["tx_currency_code"] == "usd"]
 
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "pen"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "usd"]
 
     st.subheader("Separación por moneda")
 
@@ -167,29 +166,23 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if (
-        "tx_reference" in df.columns
-        and "tx_amount" in df.columns
-        and "transaction_id" in df.columns
-        and "sf_transaction_related_id" in df.columns
-    ):
+    if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+        pagos = df[df["tx_reference"].str.startswith("py", na=False)]
+        fees = df[df["tx_reference"].str.startswith("sf", na=False)]
 
-        # unir PY con su comisión real
+        # unir pagos con comisiones
         comisiones = pagos.merge(
-            fees[["sf_transaction_related_id", "tx_amount"]],
-            left_on="transaction_id",
-            right_on="sf_transaction_related_id",
+            fees[["psp_tin", "tx_amount"]],
+            on="psp_tin",
             how="left",
             suffixes=("_pago", "_comision")
         )
 
-        # comisión real del sistema
+        # comisión real
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        # comisión según contrato
+        # comisión contrato
         comisiones["comision_contrato"] = (
             (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
@@ -205,22 +198,18 @@ if archivo is not None:
             comisiones["comision"] - comisiones["comision_contrato"]
         ).round(2)
 
-        columnas = [
-            "psp_tin",
-            "transaction_id",
-            "tx_amount_pago",
-            "comision",
-            "comision_contrato",
-            "diferencia"
+        tabla = comisiones[
+            [
+                "psp_tin",
+                "tx_amount_pago",
+                "comision",
+                "comision_contrato",
+                "diferencia"
+            ]
         ]
-
-        columnas_existentes = [c for c in columnas if c in comisiones.columns]
-
-        tabla = comisiones[columnas_existentes]
 
         st.dataframe(tabla)
 
-        # métricas de control
         st.subheader("Control de comisiones")
 
         c1, c2 = st.columns(2)
@@ -232,7 +221,6 @@ if archivo is not None:
             len(tabla[tabla["diferencia"] != 0])
         )
 
-        # descarga
         st.download_button(
             "Descargar comparación de comisiones",
             exportar_csv(tabla),
