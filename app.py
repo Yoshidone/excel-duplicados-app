@@ -232,6 +232,26 @@ if archivo is not None:
 
         st.dataframe(tabla)
 
+        # ===============================
+        # TABLERO FINANCIERO (RESUMEN)
+        # ===============================
+        st.subheader("Resumen financiero")
+
+        total_recaudo = tabla["tx_amount_pago"].sum()
+        total_comisiones = tabla["comision"].sum()
+        total_contrato = tabla["comision_contrato"].sum()
+        total_diferencia = tabla["diferencia"].sum()
+        total_neto = tabla["total_neto"].sum()
+
+        c1, c2, c3 = st.columns(3)
+        c4, c5 = st.columns(2)
+
+        c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
+        c2.metric("💸 Total Comisiones", f"S/ {total_comisiones:,.2f}")
+        c3.metric("📑 Total Comisión Contrato", f"S/ {total_contrato:,.2f}")
+        c4.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
+        c5.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+
         st.subheader("Control de comisiones")
 
         c1, c2 = st.columns(2)
