@@ -79,7 +79,7 @@ if archivo is not None:
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # ---------------------------
-    # LIMPIAR IDS (QUITAR COMAS)
+    # LIMPIAR IDS
     # ---------------------------
 
     df["tx_transaction_id_clean"] = (
@@ -187,15 +187,17 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    # separar pagos
+    # separar pagos (PY)
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
 
     pagos["tx_amount_pago"] = pagos["tx_amount"]
 
+    # separar comisiones (SF)
+    fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+
     # crear mapa de comisiones
     fees_map = (
-        df[df["sf_transaction_related_id_clean"] != ""]
-        .groupby("sf_transaction_related_id_clean")["tx_amount"]
+        fees.groupby("sf_transaction_related_id_clean")["tx_amount"]
         .sum()
         .abs()
     )
