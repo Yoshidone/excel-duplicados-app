@@ -4,7 +4,6 @@ import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
-
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
@@ -19,7 +18,7 @@ def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 # ---------------------------
-# Leer CSV (MEJORADO)
+# Leer CSV MEJORADO
 # ---------------------------
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
@@ -28,7 +27,7 @@ def leer_csv_seguro(f):
             df = pd.read_csv(
                 f,
                 sep=sep,
-                decimal=".",        # fuerza punto decimal
+                decimal=".",
                 encoding="utf-8",
                 low_memory=False
             )
@@ -38,7 +37,7 @@ def leer_csv_seguro(f):
     raise ValueError("No se pudo leer el CSV")
 
 # ---------------------------
-# Cargar archivo
+# Cargar archivo (ZIP inteligente)
 # ---------------------------
 @st.cache_data
 def cargar_archivo(file):
@@ -46,23 +45,27 @@ def cargar_archivo(file):
     nombre = file.name.lower()
 
     if nombre.endswith(".csv"):
-        df = leer_csv_seguro(file)
+        return leer_csv_seguro(file)
 
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
 
-            archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
+            archivos = z.namelist()
 
-            if not archivos_csv:
-                raise ValueError("El ZIP no contiene CSV")
+            archivos_csv = [n for n in archivos if n.lower().endswith(".csv")]
+            if archivos_csv:
+                with z.open(archivos_csv[0]) as f:
+                    return leer_csv_seguro(f)
 
-            with z.open(archivos_csv[0]) as f:
-                df = leer_csv_seguro(f)
+            archivos_excel = [n for n in archivos if n.lower().endswith((".xlsx", ".xls"))]
+            if archivos_excel:
+                with z.open(archivos_excel[0]) as f:
+                    return pd.read_excel(f)
+
+            raise ValueError("El ZIP no contiene CSV ni Excel")
 
     else:
-        df = pd.read_excel(file)
-
-    return df
+        return pd.read_excel(file)
 
 
 # ---------------------------
@@ -111,7 +114,6 @@ if archivo is not None:
     # ---------------------------
     # Separación por moneda
     # ---------------------------
-
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
