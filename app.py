@@ -86,24 +86,14 @@ if archivo:
             st.stop()
 
 
-    # -------------------------
-    # SEPARAR PAGOS Y COMISIONES
-    # -------------------------
+# LIMPIAR Y CONVERTIR MONTO
 
-    pagos = df[df["OP_amount"] > 0]
-    comisiones = df[df["OP_amount"] < 0]
+df["OP_amount"] = pd.to_numeric(df["OP_amount"], errors="coerce")
 
+# SEPARAR PAGOS Y COMISIONES
 
-    pagos = pagos.groupby("Deuda_external_id")["OP_amount"].sum().reset_index()
-    pagos.rename(columns={"OP_amount":"tx_amount_pago"}, inplace=True)
-
-    comisiones = comisiones.groupby("Deuda_external_id")["OP_amount"].sum().reset_index()
-    comisiones.rename(columns={"OP_amount":"comision_contrato"}, inplace=True)
-
-
-    resultado = pagos.merge(comisiones, on="Deuda_external_id", how="left")
-
-    resultado["comision_contrato"] = resultado["comision_contrato"].abs()
+pagos = df[df["OP_amount"] > 0]
+comisiones = df[df["OP_amount"] < 0]
 
 
     # -------------------------
@@ -116,6 +106,7 @@ if archivo:
         resultado["comision"] = resultado["comision"] * 1.18
 
     resultado["comision"] = resultado["comision"].round(2)
+   df = df.dropna(subset=["OP_amount"])
 
 
     # -------------------------
@@ -178,3 +169,4 @@ if archivo:
         "comparacion_comisiones.csv",
         "text/csv"
     )
+
