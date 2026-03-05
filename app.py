@@ -87,7 +87,7 @@ if archivo is not None:
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # ---------------------------
-    # LIMPIAR IDS PARA MATCH PERFECTO
+    # LIMPIAR IDS (ELIMINAR COMAS)
     # ---------------------------
 
     if "tx_transaction_id" in df.columns:
@@ -195,14 +195,16 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    # separar pagos y comisiones
+    # separar pagos
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
-    fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
 
-    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
-    fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
+    # detectar fees usando sf_transaction_related_id
+    fees = df[df["sf_transaction_related_id"].notna()].copy()
 
-    # merge usando IDs correctos
+    pagos["tx_amount_pago"] = pagos["tx_amount"]
+    fees["tx_amount_comision"] = fees["tx_amount"]
+
+    # merge correcto
     comisiones = pagos.merge(
         fees[["sf_transaction_related_id", "tx_amount_comision"]],
         left_on="tx_transaction_id",
@@ -241,12 +243,7 @@ if archivo is not None:
 
     tabla = tabla.fillna(0)
 
-    # total neto
     tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
-
-    # asegurar tipos numéricos
-    tabla["tx_amount_pago"] = pd.to_numeric(tabla["tx_amount_pago"], errors="coerce")
-    tabla["comision"] = pd.to_numeric(tabla["comision"], errors="coerce")
 
     # ---------------------------
     # Resumen financiero
