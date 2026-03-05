@@ -49,14 +49,11 @@ def cargar_archivo(file):
             if not archivos_csv:
                 raise ValueError("El ZIP no contiene CSV")
 
-            if len(archivos_csv) > 1:
-                st.warning("El ZIP contiene varios CSV. Se procesará solo el primero.")
-
             with z.open(archivos_csv[0]) as f:
                 df = leer_csv_seguro(f)
 
     else:
-        df = pd.read_excel(file, engine="openpyxl")
+        df = pd.read_excel(file)
 
     return df
 
@@ -69,24 +66,7 @@ if archivo is not None:
     with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
-    df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
-
-    # ---------------------------
-    # DETECTAR TIPO OPERACION
-    # ---------------------------
-
-    df["tipo_operacion"] = "OTRO"
-
-    if "tx_reference" in df.columns:
-        df.loc[
-            df["tx_reference"].astype(str).str.upper().str.startswith("PY", na=False),
-            "tipo_operacion"
-        ] = "PAGO"
-
-        df.loc[
-            df["tx_reference"].astype(str).str.upper().str.startswith("SF", na=False),
-            "tipo_operacion"
-        ] = "COMISION"
+    df.columns = df.columns.str.lower().str.strip()
 
     st.success("Archivo cargado correctamente")
 
@@ -98,13 +78,12 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
+    # normalizar moneda
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
+    # normalizar referencia
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
-
-    if "tx_amount" in df.columns:
-        df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -112,7 +91,6 @@ if archivo is not None:
     # ---------------------------
     # Dashboard
     # ---------------------------
-
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -120,13 +98,6 @@ if archivo is not None:
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
     c3.metric("Registros sin duplicados", len(df_sin_duplicados))
-
-    total_monto = df[df["tipo_operacion"] == "PAGO"]["tx_amount"].sum()
-    total_comision = df[df["tipo_operacion"] == "COMISION"]["tx_amount"].abs().sum()
-
-    c4, c5 = st.columns(2)
-    c4.metric("Monto total procesado", round(total_monto,2))
-    c5.metric("Comisiones totales", round(total_comision,2))
 
     st.divider()
 
@@ -154,7 +125,6 @@ if archivo is not None:
     # ---------------------------
     # Descargas
     # ---------------------------
-
     st.subheader("Descargar resultados")
 
     c1, c2, c3 = st.columns(3)
@@ -204,20 +174,19 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "tx_transaction_id" in df.columns and "sf_transaction_related_id" in df.columns:
+    if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-        pagos = df[df["tipo_operacion"] == "PAGO"]
-        fees = df[df["tipo_operacion"] == "COMISION"]
+        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-        # MATCH CORRECTO ENTRE PAGO Y COMISION
         comisiones = pagos.merge(
-            fees[["sf_transaction_related_id", "tx_amount"]],
-            left_on="tx_transaction_id",
-            right_on="sf_transaction_related_id",
+            fees[["psp_tin", "tx_amount"]],
+            on="psp_tin",
             how="left",
             suffixes=("_pago", "_comision")
         )
 
+        # convertir a número
         comisiones["tx_amount_pago"] = pd.to_numeric(
             comisiones["tx_amount_pago"], errors="coerce"
         )
@@ -226,8 +195,10 @@ if archivo is not None:
             comisiones["tx_amount_comision"], errors="coerce"
         )
 
+        # comisión real
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
+        # comisión contrato
         comisiones["comision_contrato"] = (
             (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
@@ -238,6 +209,7 @@ if archivo is not None:
 
         comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
 
+        # diferencia
         comisiones["diferencia"] = (
             comisiones["comision"] - comisiones["comision_contrato"]
         ).round(2)
@@ -245,7 +217,6 @@ if archivo is not None:
         tabla = comisiones[
             [
                 "psp_tin",
-                "tx_currency_code",
                 "tx_amount_pago",
                 "comision",
                 "comision_contrato",
@@ -253,11 +224,11 @@ if archivo is not None:
             ]
         ]
 
+        # eliminar vacíos
         tabla = tabla.fillna(0)
 
+        # total neto
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
-
-        tabla = tabla.sort_values("diferencia", ascending=False)
 
         st.dataframe(tabla)
 
