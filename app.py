@@ -19,13 +19,20 @@ def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 # ---------------------------
-# Leer CSV
+# Leer CSV (MEJORADO)
 # ---------------------------
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pd.read_csv(f, sep=sep, low_memory=False)
+            df = pd.read_csv(
+                f,
+                sep=sep,
+                decimal=".",        # fuerza punto decimal
+                encoding="utf-8",
+                low_memory=False
+            )
+            return df
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
@@ -186,7 +193,6 @@ if archivo is not None:
             suffixes=("_pago", "_comision")
         )
 
-        # convertir a número
         comisiones["tx_amount_pago"] = pd.to_numeric(
             comisiones["tx_amount_pago"], errors="coerce"
         )
@@ -195,21 +201,18 @@ if archivo is not None:
             comisiones["tx_amount_comision"], errors="coerce"
         )
 
-        # comisión real
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        # comisión contrato
         comisiones["comision_contrato"] = (
             (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
         )
 
         if aplicar_igv:
-            comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+            comisiones["comision_contrato"] *= 1.18
 
         comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
 
-        # diferencia
         comisiones["diferencia"] = (
             comisiones["comision"] - comisiones["comision_contrato"]
         ).round(2)
@@ -222,18 +225,14 @@ if archivo is not None:
                 "comision_contrato",
                 "diferencia"
             ]
-        ]
+        ].fillna(0)
 
-        # eliminar vacíos
-        tabla = tabla.fillna(0)
-
-        # total neto
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
         st.dataframe(tabla)
 
         # ===============================
-        # TABLERO FINANCIERO (RESUMEN)
+        # TABLERO FINANCIERO
         # ===============================
         st.subheader("Resumen financiero")
 
@@ -251,21 +250,3 @@ if archivo is not None:
         c3.metric("📑 Total Comisión Contrato", f"S/ {total_contrato:,.2f}")
         c4.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
         c5.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-
-        st.subheader("Control de comisiones")
-
-        c1, c2 = st.columns(2)
-
-        c1.metric("Total comisiones analizadas", len(tabla))
-
-        c2.metric(
-            "Comisiones que NO coinciden",
-            len(tabla[tabla["diferencia"] != 0])
-        )
-
-        st.download_button(
-            "Descargar comparación de comisiones",
-            exportar_csv(tabla),
-            "comparacion_comisiones.csv",
-            mime="text/csv"
-        )
