@@ -13,7 +13,7 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
-# Exportar CSV (mucho más ligero)
+# Exportar CSV
 # ---------------------------
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -98,11 +98,9 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
-    # CON DUPLICADOS
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
-    # SIN DUPLICADOS
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -118,7 +116,7 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Descargas seguras
+    # Descargas
     # ---------------------------
     st.subheader("Descargar resultados")
 
@@ -149,7 +147,7 @@ if archivo is not None:
         )
 
 # ==================================================
-# 👇 AQUI SOLO SE AGREGA LO NUEVO (NO MODIFICA NADA)
+# ANALISIS DE COMISIONES
 # ==================================================
 
     st.divider()
@@ -167,26 +165,40 @@ if archivo is not None:
         step=0.01
     )
 
-    if "tx_reference" in df.columns and "tx_amount" in df.columns:
+    aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
+
+    if (
+        "tx_reference" in df.columns
+        and "tx_amount" in df.columns
+        and "transaction_id" in df.columns
+        and "sf_transaction_related_id" in df.columns
+    ):
 
         pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
         fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
+        # unir PY con su comisión real
         comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
+            fees[["sf_transaction_related_id", "tx_amount"]],
+            left_on="transaction_id",
+            right_on="sf_transaction_related_id",
             how="left",
             suffixes=("_pago", "_comision")
         )
 
-        # comisión real
+        # comisión real del sistema
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        # comisión contrato
+        # comisión según contrato
         comisiones["comision_contrato"] = (
             (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
             + fee_fijo
-        ).round(2)
+        )
+
+        if aplicar_igv:
+            comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+
+        comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
 
         # diferencia
         comisiones["diferencia"] = (
@@ -195,6 +207,7 @@ if archivo is not None:
 
         columnas = [
             "psp_tin",
+            "transaction_id",
             "tx_amount_pago",
             "comision",
             "comision_contrato",
@@ -207,6 +220,19 @@ if archivo is not None:
 
         st.dataframe(tabla)
 
+        # métricas de control
+        st.subheader("Control de comisiones")
+
+        c1, c2 = st.columns(2)
+
+        c1.metric("Total comisiones analizadas", len(tabla))
+
+        c2.metric(
+            "Comisiones que NO coinciden",
+            len(tabla[tabla["diferencia"] != 0])
+        )
+
+        # descarga
         st.download_button(
             "Descargar comparación de comisiones",
             exportar_csv(tabla),
