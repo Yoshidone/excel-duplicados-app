@@ -13,7 +13,7 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
-# Exportar CSV (mucho más ligero)
+# Exportar CSV
 # ---------------------------
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -58,7 +58,7 @@ def cargar_archivo(file):
 
 
 # ---------------------------
-# Procesar
+# Procesar archivo
 # ---------------------------
 if archivo is not None:
 
@@ -85,7 +85,9 @@ if archivo is not None:
         st.error("No existe la columna tx_amount")
         st.stop()
 
+    # ---------------------------
     # eliminar duplicados
+    # ---------------------------
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     # ---------------------------
@@ -105,11 +107,9 @@ if archivo is not None:
     # Separación por moneda
     # ---------------------------
 
-    # CON DUPLICADOS
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
-    # SIN DUPLICADOS
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -153,7 +153,7 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # NUEVO: Análisis de revenue
+    # Análisis de revenue
     # ---------------------------
 
     volumen_total = pagos["tx_amount"].abs().sum()
@@ -174,7 +174,7 @@ if archivo is not None:
     st.divider()
 
     # ---------------------------
-    # Descargas seguras
+    # Descargas
     # ---------------------------
     st.subheader("Descargar resultados")
 
@@ -213,7 +213,7 @@ if archivo is not None:
         )
 
     # ---------------------------
-    # NUEVO: Comisión por cliente
+    # Comisión por cliente
     # ---------------------------
 
     st.divider()
@@ -228,11 +228,18 @@ if archivo is not None:
 
     comisiones_cliente["comision"] = comisiones_cliente["tx_amount_comision"].abs()
 
+    # porcentaje de comisión por cliente
+    comisiones_cliente["porcentaje_comision"] = (
+        comisiones_cliente["comision"] /
+        comisiones_cliente["tx_amount_pago"]
+    ) * 100
+
     columnas_mostrar = [
         "deb_nombre",
         "deb_doc",
         "tx_amount_pago",
         "comision",
+        "porcentaje_comision",
         "tx_currency_code"
     ]
 
