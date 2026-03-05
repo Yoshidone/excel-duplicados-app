@@ -61,134 +61,102 @@ if archivo is not None:
     df.columns = df.columns.str.lower().str.strip()
 
     # ---------------------------
-    # DETECTAR TIPO OPERACION (SIN IMPORTAR EL ORDEN)
+    # DETECTAR TIPO OPERACION
     # ---------------------------
     df["tipo_operacion"] = "OTRO"
     
+    # Usamos OP_AMOUNT para identificar roles
     if "op_amount" in df.columns:
-        # Forzamos conversión a número
         df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce").fillna(0)
         
-        # Si es positivo, es el PAGO (Total), sin importar el nombre de la referencia
+        # Positivo = TOTAL (PAGO), Negativo = COMISION
         df.loc[df["op_amount"] > 0, "tipo_operacion"] = "PAGO"
-        
-        # Si es negativo, es la COMISION
         df.loc[df["op_amount"] < 0, "tipo_operacion"] = "COMISION"
 
     st.success("Archivo cargado correctamente")
 
-    if "psp_tin" not in df.columns:
-        st.error("No existe la columna psp_tin")
-        st.stop()
+    # Validamos columnas necesarias (psp_tin e invoice_public_id)
+    columnas_clave = ["psp_tin", "invoice_public_id", "tx_currency_code"]
+    for col in columnas_clave:
+        if col not in df.columns:
+            st.error(f"Falta la columna crítica: {col}")
+            st.stop()
 
-    if "tx_currency_code" not in df.columns:
-        st.error("No existe la columna tx_currency_code")
-        st.stop()
-
-    # normalizar moneda
+    # Normalización
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
-
-    # normalizar referencia
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # eliminar duplicados para el dashboard inicial
+    # Dashboard e info inicial (se mantiene tu código)
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
-    # ---------------------------
-    # Dashboard
-    # ---------------------------
     st.subheader("Dashboard financiero")
-
     c1, c2, c3 = st.columns(3)
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
-    c3.metric("Registros sin duplicados", len(df_sin_duplicados))
+    c3.metric("Registros únicos (PSP_TIN)", len(df_sin_duplicados))
 
     st.divider()
 
-    # ---------------------------
-    # Separación por moneda
-    # ---------------------------
+    # Separación por moneda (se mantiene tu código)
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
-
     st.subheader("Separación por moneda")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("PEN totales", len(pen_total))
     c2.metric("USD totales", len(usd_total))
-    c3.metric("PEN sin duplicados", len(pen))
-    c4.metric("USD sin duplicados", len(usd))
-
-    st.divider()
+    c1.divider()
 
     # ---------------------------
-    # Descargas
+    # ANALISIS DE COMISIONES (LLAVE COMPUESTA: PSP_TIN + INVOICE)
     # ---------------------------
-    st.subheader("Descargar resultados")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base_sin_duplicados.csv", mime="text/csv")
-    with c2:
-        st.download_button("Descargar PEN", exportar_csv(pen), "registros_pen.csv", mime="text/csv")
-    with c3:
-        st.download_button("Descargar USD", exportar_csv(usd), "registros_usd.csv", mime="text/csv")
-
-# ==================================================
-# ANALISIS DE COMISIONES
-# ==================================================
-
-    st.divider()
     st.subheader("Comparación de comisiones")
 
     porcentaje_contrato = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
     fee_fijo = st.number_input("Fee fijo", value=0.90, step=0.01)
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "psp_tin" in df.columns and "op_amount" in df.columns:
+    # SEPARACIÓN Y CRUCE
+    # Usamos psp_tin e invoice_public_id para que el match sea perfecto
+    llave = ["psp_tin", "invoice_public_id"]
 
-        # Extraemos los pagos (positivos) y comisiones (negativos)
-        # No importa el orden de las filas en el Excel, aquí se separan por valor
-        pagos = df[df["tipo_operacion"] == "PAGO"][["psp_tin", "op_amount"]].rename(columns={"op_amount": "tx_amount_pago"})
-        fees = df[df["tipo_operacion"] == "COMISION"][["psp_tin", "op_amount"]].rename(columns={"op_amount": "tx_amount_comision"})
+    pagos = df[df["tipo_operacion"] == "PAGO"][llave + ["op_amount", "tx_reference"]].rename(columns={"op_amount": "tx_amount_pago"})
+    fees = df[df["tipo_operacion"] == "COMISION"][llave + ["op_amount"]].rename(columns={"op_amount": "tx_amount_comision"})
 
-        # MERGE OUTER: Cruza la información del mismo psp_tin sin importar dónde esté cada fila
-        comisiones = pd.merge(pagos, fees, on="psp_tin", how="outer")
+    # MERGE OUTER con DOBLE LLAVE para evitar ceros por desorden
+    comisiones = pd.merge(pagos, fees, on=llave, how="outer")
 
-        # Rellenar con 0 lo que no encuentre
-        comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].fillna(0)
-        comisiones["tx_amount_comision"] = comisiones["tx_amount_comision"].fillna(0)
+    # Limpieza de datos post-merge
+    comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].fillna(0)
+    comisiones["tx_amount_comision"] = comisiones["tx_amount_comision"].fillna(0)
+    comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
-        comisiones["comision"] = comisiones["tx_amount_comision"].abs()
+    # Cálculo según contrato
+    comisiones["comision_contrato"] = 0.0
+    mask = comisiones["tx_amount_pago"] != 0
+    comisiones.loc[mask, "comision_contrato"] = (
+        (comisiones.loc[mask, "tx_amount_pago"] * (porcentaje_contrato / 100)) + fee_fijo
+    )
 
-        # Cálculo de contrato: solo si hay un pago registrado
-        comisiones["comision_contrato"] = 0.0
-        mask_hay_pago = comisiones["tx_amount_pago"] != 0
-        
-        comisiones.loc[mask_hay_pago, "comision_contrato"] = (
-            (comisiones.loc[mask_hay_pago, "tx_amount_pago"] * (porcentaje_contrato / 100))
-            + fee_fijo
-        )
+    if aplicar_igv:
+        comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
 
-        if aplicar_igv:
-            comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+    comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
+    comisiones["diferencia"] = (comisiones["comision"] - comisiones["comision_contrato"]).round(2)
+    comisiones["total_neto"] = comisiones["tx_amount_pago"] - comisiones["comision"]
 
-        comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
-        comisiones["diferencia"] = (comisiones["comision"] - comisiones["comision_contrato"]).round(2)
+    # Mostrar Tabla Final
+    tabla = comisiones[[
+        "psp_tin", "invoice_public_id", "tx_amount_pago", 
+        "comision", "comision_contrato", "diferencia", "total_neto"
+    ]].fillna(0)
 
-        # Preparamos la tabla final respetando todos los registros
-        tabla = comisiones[["psp_tin", "tx_amount_pago", "comision", "comision_contrato", "diferencia"]]
-        tabla = tabla.fillna(0)
-        tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+    st.dataframe(tabla)
 
-        # Mostramos la tabla completa (sin filtros)
-        st.dataframe(tabla)
+    # Control de métricas final
+    st.subheader("Control de auditoría")
+    c1, c2 = st.columns(2)
+    c1.metric("Transacciones procesadas", len(tabla))
+    c2.metric("Casos con diferencia", len(tabla[tabla["diferencia"] != 0]))
 
-        st.subheader("Control de comisiones")
-        c1, c2 = st.columns(2)
-        c1.metric("Total registros analizados", len(tabla))
-        c2.metric("Discrepancias", len(tabla[tabla["diferencia"] != 0]))
-
-        st.download_button("Descargar comparación", exportar_csv(tabla), "reporte_comisiones.csv", mime="text/csv")
+    st.download_button("Descargar reporte detallado", exportar_csv(tabla), "analisis_comisiones_final.csv", mime="text/csv")
