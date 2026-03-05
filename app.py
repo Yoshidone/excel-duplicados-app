@@ -60,8 +60,9 @@ def cargar_archivo(file):
 
 
 # ---------------------------
-# Procesar
+# Procesar archivo
 # ---------------------------
+
 if archivo is not None:
 
     with st.spinner("Procesando archivo..."):
@@ -71,26 +72,12 @@ if archivo is not None:
 
     st.success("Archivo cargado correctamente")
 
-    # convertir montos
+    # asegurar números
+    df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
     df["op_amount"] = pd.to_numeric(df["op_amount"], errors="coerce")
 
-    # limpiar ids
-    df["tx_transaction_id_clean"] = (
-        df["tx_transaction_id"]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .str.strip()
-    )
-
-    df["sf_transaction_related_id_clean"] = (
-        df["sf_transaction_related_id"]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .str.strip()
-    )
-
     # ---------------------------
-    # Dashboard general
+    # Dashboard
     # ---------------------------
 
     st.subheader("Dashboard financiero")
@@ -99,7 +86,7 @@ if archivo is not None:
 
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
-    c3.metric("Registros únicos", df["psp_tin"].nunique())
+    c3.metric("PSP únicos", df["psp_tin"].nunique())
 
     st.divider()
 
@@ -144,7 +131,7 @@ if archivo is not None:
         )
 
 # ==================================================
-# Comparación de comisiones
+# COMPARACIÓN DE COMISIONES
 # ==================================================
 
     st.divider()
@@ -165,65 +152,70 @@ if archivo is not None:
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
     # ---------------------------
-    # PAGOS
+    # PAGOS (TX_amount)
     # ---------------------------
 
-    pagos = df[df["op_amount"] > 0].copy()
+    pagos = (
+        df[df["op_amount"] > 0]
+        .groupby("psp_tin")["tx_amount"]
+        .sum()
+        .reset_index()
+    )
 
-    pagos["tx_amount_pago"] = pagos["op_amount"]
+    pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
 
     # ---------------------------
-    # COMISIONES
+    # COMISIONES (OP_amount negativo)
     # ---------------------------
 
     fees = df[df["op_amount"] < 0].copy()
 
     fees["comision"] = fees["op_amount"].abs()
 
-    fees_map = fees.groupby("sf_transaction_related_id_clean")["comision"].sum()
+    comisiones = (
+        fees.groupby("psp_tin")["comision"]
+        .sum()
+        .reset_index()
+    )
 
-    # match comisión
-    pagos["comision"] = pagos["tx_transaction_id_clean"].map(fees_map)
+    # ---------------------------
+    # UNIR PAGOS + COMISIONES
+    # ---------------------------
 
-    pagos["comision"] = pagos["comision"].fillna(0)
+    tabla = pagos.merge(comisiones, on="psp_tin", how="left")
+
+    tabla["comision"] = tabla["comision"].fillna(0)
 
     # ---------------------------
     # comisión contrato
     # ---------------------------
 
-    pagos["comision_contrato"] = (
-        (pagos["tx_amount_pago"] * (porcentaje_contrato / 100))
+    tabla["comision_contrato"] = (
+        (tabla["tx_amount_pago"] * (porcentaje_contrato / 100))
         + fee_fijo
     )
 
     if aplicar_igv:
-        pagos["comision_contrato"] = pagos["comision_contrato"] * 1.18
+        tabla["comision_contrato"] = tabla["comision_contrato"] * 1.18
 
-    pagos["comision_contrato"] = pagos["comision_contrato"].round(2)
-
-    # diferencia
-
-    pagos["diferencia"] = (
-        pagos["comision"] - pagos["comision_contrato"]
-    ).round(2)
-
-    # neto
-
-    pagos["total_neto"] = pagos["tx_amount_pago"] - pagos["comision"]
-
-    tabla = pagos[
-        [
-            "psp_tin",
-            "tx_amount_pago",
-            "comision",
-            "comision_contrato",
-            "diferencia",
-            "total_neto"
-        ]
-    ]
+    tabla["comision_contrato"] = tabla["comision_contrato"].round(2)
 
     # ---------------------------
-    # Resumen financiero
+    # diferencia
+    # ---------------------------
+
+    tabla["diferencia"] = (
+        tabla["comision"] - tabla["comision_contrato"]
+    ).round(2)
+
+    # ---------------------------
+    # total neto
+    # ---------------------------
+
+    tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+
+    # ---------------------------
+    # Resumen
     # ---------------------------
 
     total_pagos = tabla["tx_amount_pago"].sum()
