@@ -87,24 +87,22 @@ if archivo is not None:
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
     # ---------------------------
-    # LIMPIAR IDS (ELIMINAR COMAS)
+    # LIMPIAR IDS
     # ---------------------------
 
-    if "tx_transaction_id" in df.columns:
-        df["tx_transaction_id"] = (
-            df["tx_transaction_id"]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.strip()
-        )
+    df["tx_transaction_id_clean"] = (
+        df["tx_transaction_id"]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .str.strip()
+    )
 
-    if "sf_transaction_related_id" in df.columns:
-        df["sf_transaction_related_id"] = (
-            df["sf_transaction_related_id"]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.strip()
-        )
+    df["sf_transaction_related_id_clean"] = (
+        df["sf_transaction_related_id"]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .str.strip()
+    )
 
     # eliminar duplicados
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -198,17 +196,18 @@ if archivo is not None:
     # separar pagos
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
 
-    # detectar fees usando sf_transaction_related_id
-    fees = df[df["sf_transaction_related_id"].notna()].copy()
-
     pagos["tx_amount_pago"] = pagos["tx_amount"]
+
+    # buscar comisiones en cualquier fila
+    fees = df[df["sf_transaction_related_id_clean"] != ""].copy()
+
     fees["tx_amount_comision"] = fees["tx_amount"]
 
-    # merge correcto
+    # match usando ids limpiados
     comisiones = pagos.merge(
-        fees[["sf_transaction_related_id", "tx_amount_comision"]],
-        left_on="tx_transaction_id",
-        right_on="sf_transaction_related_id",
+        fees[["sf_transaction_related_id_clean", "tx_amount_comision"]],
+        left_on="tx_transaction_id_clean",
+        right_on="sf_transaction_related_id_clean",
         how="left"
     )
 
@@ -248,6 +247,7 @@ if archivo is not None:
     # ---------------------------
     # Resumen financiero
     # ---------------------------
+
     total_pagos = tabla["tx_amount_pago"].sum()
     total_comisiones = tabla["comision"].sum()
     total_neto = tabla["total_neto"].sum()
