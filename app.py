@@ -4,7 +4,6 @@ import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
-
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader(
@@ -66,6 +65,7 @@ if archivo is not None:
     with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
+    # normalizar nombres de columnas
     df.columns = df.columns.str.lower().str.strip()
 
     st.success("Archivo cargado correctamente")
@@ -78,9 +78,10 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
-    # normalizar columnas
+    # normalizar moneda
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
+    # normalizar referencias
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
@@ -106,6 +107,7 @@ if archivo is not None:
     # ---------------------------
     # Separación por moneda
     # ---------------------------
+
     pen_total = df[df["tx_currency_code"] == "PEN"]
     usd_total = df[df["tx_currency_code"] == "USD"]
 
@@ -175,24 +177,37 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "tx_reference" in df.columns and "op_operation_no" in df.columns:
+    if "tx_reference" in df.columns:
 
         # PAGOS
         pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
 
         # COMISIONES
-        fees = df[df["op_operation_no"].str.startswith("SF", na=False)].copy()
+        if "op_operation_no" in df.columns:
+            fees = df[df["op_operation_no"].str.startswith("SF", na=False)].copy()
+        else:
+            fees = pd.DataFrame()
 
-        # unir pagos con comisiones
-        comisiones = pagos.merge(
-            fees[["psp_tin", "op_amount"]],
-            on="psp_tin",
-            how="left"
+        if not fees.empty and "op_amount" in fees.columns:
+
+            comisiones = pagos.merge(
+                fees[["psp_tin", "op_amount"]],
+                on="psp_tin",
+                how="left"
+            )
+
+            comisiones["op_amount"] = pd.to_numeric(
+                comisiones["op_amount"], errors="coerce"
+            )
+
+        else:
+
+            comisiones = pagos.copy()
+            comisiones["op_amount"] = 0
+
+        comisiones["tx_amount"] = pd.to_numeric(
+            comisiones["tx_amount"], errors="coerce"
         )
-
-        # convertir montos
-        comisiones["tx_amount"] = pd.to_numeric(comisiones["tx_amount"], errors="coerce")
-        comisiones["op_amount"] = pd.to_numeric(comisiones["op_amount"], errors="coerce")
 
         # comisión real
         comisiones["comision"] = comisiones["op_amount"].abs()
@@ -204,7 +219,7 @@ if archivo is not None:
         )
 
         if aplicar_igv:
-            comisiones["comision_contrato"] = comisiones["comision_contrato"] * 1.18
+            comisiones["comision_contrato"] *= 1.18
 
         comisiones["comision_contrato"] = comisiones["comision_contrato"].round(2)
 
