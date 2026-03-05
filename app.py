@@ -73,6 +73,9 @@ if archivo is not None:
 
     df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
+    # 🔹 asegurar que tx_reference sea texto
+    df["tx_reference"] = df["tx_reference"].astype(str)
+
     # ---------------------------
     # Dashboard
     # ---------------------------
@@ -146,27 +149,25 @@ if archivo is not None:
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
 # ---------------------------
-# PAGOS
+# PAGOS (PY)
 # ---------------------------
 
     pagos = (
         df[df["tx_reference"].str.startswith("PY", na=False)]
-        .groupby("psp_tin")["tx_amount"]
+        .groupby("psp_tin", as_index=False)["tx_amount"]
         .sum()
-        .reset_index()
     )
 
     pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
 
 # ---------------------------
-# COMISIONES
+# COMISIONES (SF)
 # ---------------------------
 
     comisiones = (
         df[df["tx_reference"].str.startswith("SF", na=False)]
-        .groupby("psp_tin")["tx_amount"]
+        .groupby("psp_tin", as_index=False)["tx_amount"]
         .sum()
-        .reset_index()
     )
 
     comisiones = comisiones.rename(columns={"tx_amount": "comision"})
@@ -176,9 +177,6 @@ if archivo is not None:
 # ---------------------------
 
     tabla = pagos.merge(comisiones, on="psp_tin", how="left")
-
-# Aquí es donde aparecen los None
-# porque hay pagos sin comisión
 
 # ---------------------------
 # comisión contrato
