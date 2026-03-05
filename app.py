@@ -66,7 +66,6 @@ if archivo is not None:
     with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
-    # normalizar columnas
     df.columns = df.columns.str.lower().str.strip()
 
     st.success("Archivo cargado correctamente")
@@ -79,10 +78,10 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
-    # corregir formato de moneda
+    # normalizar moneda
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
-    # corregir referencia
+    # normalizar referencia
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
@@ -225,9 +224,14 @@ if archivo is not None:
             ]
         ]
 
+        # eliminar vacíos
+        tabla = tabla.fillna(0)
+
+        # total neto
+        tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
+
         st.dataframe(tabla)
 
-        # control
         st.subheader("Control de comisiones")
 
         c1, c2 = st.columns(2)
