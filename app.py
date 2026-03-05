@@ -69,7 +69,6 @@ if archivo is not None:
     with st.spinner("Procesando archivo..."):
         df = cargar_archivo(archivo)
 
-    # Normalización robusta
     df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
 
     # ---------------------------
@@ -84,9 +83,8 @@ if archivo is not None:
             "tipo_operacion"
         ] = "PAGO"
 
-    if "op_operation_no" in df.columns:
         df.loc[
-            df["op_operation_no"].astype(str).str.upper().str.startswith("SF", na=False),
+            df["tx_reference"].astype(str).str.upper().str.startswith("SF", na=False),
             "tipo_operacion"
         ] = "COMISION"
 
@@ -100,14 +98,11 @@ if archivo is not None:
         st.error("No existe la columna tx_currency_code")
         st.stop()
 
-    # normalizar moneda
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
-    # normalizar referencia
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # asegurar montos numéricos
     if "tx_amount" in df.columns:
         df["tx_amount"] = pd.to_numeric(df["tx_amount"], errors="coerce")
 
@@ -117,6 +112,7 @@ if archivo is not None:
     # ---------------------------
     # Dashboard
     # ---------------------------
+
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
@@ -125,7 +121,6 @@ if archivo is not None:
     c2.metric("Columnas", len(df.columns))
     c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
-    # NUEVAS METRICAS FINANCIERAS
     total_monto = df[df["tipo_operacion"] == "PAGO"]["tx_amount"].sum()
     total_comision = df[df["tipo_operacion"] == "COMISION"]["tx_amount"].abs().sum()
 
@@ -159,6 +154,7 @@ if archivo is not None:
     # ---------------------------
     # Descargas
     # ---------------------------
+
     st.subheader("Descargar resultados")
 
     c1, c2, c3 = st.columns(3)
@@ -208,14 +204,16 @@ if archivo is not None:
 
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-    if "tx_reference" in df.columns and "tx_amount" in df.columns:
+    if "tx_transaction_id" in df.columns and "sf_transaction_related_id" in df.columns:
 
         pagos = df[df["tipo_operacion"] == "PAGO"]
         fees = df[df["tipo_operacion"] == "COMISION"]
 
+        # MATCH CORRECTO ENTRE PAGO Y COMISION
         comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
+            fees[["sf_transaction_related_id", "tx_amount"]],
+            left_on="tx_transaction_id",
+            right_on="sf_transaction_related_id",
             how="left",
             suffixes=("_pago", "_comision")
         )
@@ -259,7 +257,6 @@ if archivo is not None:
 
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
 
-        # ordenar por diferencia
         tabla = tabla.sort_values("diferencia", ascending=False)
 
         st.dataframe(tabla)
