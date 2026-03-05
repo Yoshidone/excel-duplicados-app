@@ -54,12 +54,12 @@ def cargar_archivo(file):
 
         with zipfile.ZipFile(file) as z:
 
-            archivos_csv = [n for n in z.namelist() if n.endswith(".csv")]
+            archivos = [n for n in z.namelist() if n.endswith(".csv")]
 
-            if not archivos_csv:
+            if not archivos:
                 raise ValueError("El ZIP no contiene CSV")
 
-            with z.open(archivos_csv[0]) as f:
+            with z.open(archivos[0]) as f:
                 df = leer_csv_seguro(f)
 
     else:
@@ -131,7 +131,7 @@ if archivo is not None:
     })
 
 # ---------------------------------------------------
-# MERGE PY ↔ SF
+# MATCH PY ↔ SF
 # ---------------------------------------------------
 
     tabla = pagos.merge(
