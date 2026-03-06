@@ -76,6 +76,17 @@ def cargar_archivo(file):
         return pd.read_excel(file, engine="openpyxl")
 
 # ---------------------------
+# FUNCIÓN AGREGAR FILA TOTAL
+# ---------------------------
+def agregar_totales(df):
+    totales = {col: "" for col in df.columns}
+    totales[df.columns[0]] = "TOTAL"
+    for col in df.select_dtypes(include="number").columns:
+        totales[col] = df[col].sum()
+    df_total = pd.concat([df, pd.DataFrame([totales])], ignore_index=True)
+    return df_total
+
+# ---------------------------
 # PROCESAR
 # ---------------------------
 if archivo is not None:
@@ -222,9 +233,12 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
+            # ✅ AGREGADO: Totales al final del Excel
+            tabla_final = agregar_totales(tabla)
+
             st.download_button(
                 "📥 Descargar comparación de comisiones",
-                exportar_csv(tabla),
+                exportar_csv(tabla_final),
                 "comparacion_comisiones.csv",
                 mime="text/csv"
             )
