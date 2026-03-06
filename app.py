@@ -58,9 +58,7 @@ def cargar_archivo(file):
 
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
-            archivos = z.namelist()
-
-            for nombre_archivo in archivos:
+            for nombre_archivo in z.namelist():
 
                 if nombre_archivo.lower().endswith(".csv"):
                     with z.open(nombre_archivo) as f:
@@ -104,10 +102,7 @@ if archivo is not None:
     # ==================================================
     # BLOQUE BASES
     # ==================================================
-    if modo in [
-        "📂 Solo preparar y descargar bases",
-        "🧩 Completo (descargas + análisis)"
-    ]:
+    if modo in ["📂 Solo preparar y descargar bases", "🧩 Completo (descargas + análisis)"]:
 
         st.subheader("Dashboard financiero")
 
@@ -127,7 +122,6 @@ if archivo is not None:
         c4.metric("USD sin duplicados", len(usd))
 
         st.divider()
-
         st.subheader("Descargar resultados")
 
         c1, c2, c3 = st.columns(3)
@@ -159,10 +153,7 @@ if archivo is not None:
     # ==================================================
     # BLOQUE COMISIONES
     # ==================================================
-    if modo in [
-        "📊 Análisis completo de comisiones",
-        "🧩 Completo (descargas + análisis)"
-    ]:
+    if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
         st.subheader("Comparación de comisiones")
@@ -177,7 +168,7 @@ if archivo is not None:
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount", "tx_currency_code"]],
+                fees[["psp_tin", "tx_amount"]],
                 on="psp_tin",
                 how="left",
                 suffixes=("_pago", "_comision")
@@ -192,12 +183,14 @@ if archivo is not None:
                 (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
             )
 
+            # IGV por operación (visual)
+            comisiones["igv"] = comisiones["comision_base"] * 0.18
+
             if aplicar_igv:
-                comisiones["igv"] = comisiones["comision_base"] * 0.18
                 comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
             else:
-                comisiones["igv"] = 0
                 comisiones["comision_final"] = comisiones["comision_base"]
+                comisiones["igv"] = 0
 
             comisiones["comision_base"] = comisiones["comision_base"].round(2)
             comisiones["igv"] = comisiones["igv"].round(2)
@@ -215,7 +208,7 @@ if archivo is not None:
                 [
                     "psp_tin","tx_amount_pago","comision_real",
                     "comision_base","igv","comision_final",
-                    "diferencia","total_neto","tx_currency_code"
+                    "diferencia","total_neto"
                 ]
             ].fillna(0)
 
@@ -247,13 +240,6 @@ if archivo is not None:
                 total_igv = 0
                 total_final = round(total_base, 2)
 
-            # ✅ Separación por moneda
-            pen_tabla = tabla[tabla["tx_currency_code"] == "PEN"]
-            usd_tabla = tabla[tabla["tx_currency_code"] == "USD"]
-
-            total_pen = pen_tabla["comision_real"].sum()
-            total_usd = usd_tabla["comision_real"].sum()
-
             diferencia_contable = round(total_comisiones - total_final, 2)
 
             c1,c2,c3 = st.columns(3)
@@ -275,11 +261,3 @@ if archivo is not None:
                 st.success("✅ OK CONTABLE — Totales cuadran con método factura")
             else:
                 st.error(f"❌ Diferencia contable detectada: S/ {diferencia_contable:,.2f}")
-
-            st.info(
-                f"""
-**Detalle moneda:**
-• PEN: S/ {total_pen:,.2f}  
-• USD: S/ {total_usd:,.2f}
-"""
-            )
