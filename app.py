@@ -177,7 +177,7 @@ if archivo is not None:
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount"]],
+                fees[["psp_tin", "tx_amount", "tx_currency_code"]],
                 on="psp_tin",
                 how="left",
                 suffixes=("_pago", "_comision")
@@ -192,13 +192,12 @@ if archivo is not None:
                 (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
             )
 
-            comisiones["igv"] = comisiones["comision_base"] * 0.18
-
             if aplicar_igv:
+                comisiones["igv"] = comisiones["comision_base"] * 0.18
                 comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
             else:
-                comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
+                comisiones["comision_final"] = comisiones["comision_base"]
 
             comisiones["comision_base"] = comisiones["comision_base"].round(2)
             comisiones["igv"] = comisiones["igv"].round(2)
@@ -216,7 +215,7 @@ if archivo is not None:
                 [
                     "psp_tin","tx_amount_pago","comision_real",
                     "comision_base","igv","comision_final",
-                    "diferencia","total_neto"
+                    "diferencia","total_neto","tx_currency_code"
                 ]
             ].fillna(0)
 
@@ -229,15 +228,33 @@ if archivo is not None:
                 mime="text/csv"
             )
 
+            # ==================================================
+            # RESUMEN FINANCIERO CONTABLE
+            # ==================================================
             st.subheader("Resumen financiero")
 
             total_recaudo = tabla["tx_amount_pago"].sum()
             total_comisiones = tabla["comision_real"].sum()
             total_base = tabla["comision_base"].sum()
-            total_igv = tabla["igv"].sum()
-            total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
             operaciones = len(tabla)
+
+            # ✅ IGV CONTABLE (como factura)
+            if aplicar_igv:
+                total_igv = round(total_base * 0.18, 2)
+                total_final = round(total_base + total_igv, 2)
+            else:
+                total_igv = 0
+                total_final = round(total_base, 2)
+
+            # ✅ Separación por moneda
+            pen_tabla = tabla[tabla["tx_currency_code"] == "PEN"]
+            usd_tabla = tabla[tabla["tx_currency_code"] == "USD"]
+
+            total_pen = pen_tabla["comision_real"].sum()
+            total_usd = usd_tabla["comision_real"].sum()
+
+            diferencia_contable = round(total_comisiones - total_final, 2)
 
             c1,c2,c3 = st.columns(3)
             c4,c5,c6 = st.columns(3)
@@ -245,24 +262,24 @@ if archivo is not None:
             c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
             c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
             c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
+            c4.metric("🏛 IGV Total (contable)", f"S/ {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final (factura)", f"S/ {total_final:,.2f}")
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
             st.divider()
-            st.subheader("Resumen de condiciones aplicadas")
+            st.subheader("Validaciones contables")
 
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_comisiones / tipo_cambio
+            if abs(diferencia_contable) <= 0.01:
+                st.success("✅ OK CONTABLE — Totales cuadran con método factura")
+            else:
+                st.error(f"❌ Diferencia contable detectada: S/ {diferencia_contable:,.2f}")
 
             st.info(
                 f"""
-💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
-equivalente a **US$ {total_usd:,.2f}**.
-
-Se aplicó una comisión de:
-**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
+**Detalle moneda:**
+• PEN: S/ {total_pen:,.2f}  
+• USD: S/ {total_usd:,.2f}
 """
             )
