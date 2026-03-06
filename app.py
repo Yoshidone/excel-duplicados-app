@@ -95,7 +95,7 @@ if archivo is not None:
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
     # ==================================================
-    # BLOQUE BASES (DESCARGAS + MÉTRICAS)
+    # BLOQUE BASES
     # ==================================================
     if modo in [
         "📂 Solo preparar y descargar bases",
@@ -243,3 +243,22 @@ if archivo is not None:
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+
+            # ==================================================
+            # RESUMEN DE CONDICIONES (AQUÍ ESTABA TU PROBLEMA)
+            # ==================================================
+            st.divider()
+            st.subheader("Resumen de condiciones aplicadas")
+
+            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+            total_usd = total_comisiones / tipo_cambio
+
+            st.info(
+                f"""
+💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
+equivalente a **US$ {total_usd:,.2f}**.
+
+Se aplicó una comisión de:
+**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
+"""
+            )
