@@ -59,9 +59,7 @@ def cargar_archivo(file):
 
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
-            archivos = z.namelist()
-
-            for nombre_archivo in archivos:
+            for nombre_archivo in z.namelist():
 
                 if nombre_archivo.lower().endswith(".csv"):
                     with z.open(nombre_archivo) as f:
@@ -252,9 +250,16 @@ if archivo is not None:
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
-            # ================== AGREGADO ZIP ==================
+            # ================== AGREGADO FINAL ==================
 
             reporte = comisiones.copy()
+
+            reporte["PY_CODIGO"] = reporte["tx_reference"].where(
+                reporte["tx_reference"].str.startswith("PY", na=False), ""
+            )
+            reporte["SF_CODIGO"] = reporte["tx_reference"].where(
+                reporte["tx_reference"].str.startswith("SF", na=False), ""
+            )
 
             reporte_contable = pd.DataFrame({
                 "FECHA": pd.to_datetime(
@@ -263,6 +268,8 @@ if archivo is not None:
                 ).dt.strftime("%d/%m/%Y"),
                 "SET_referencia": reporte.get("set_referencia", ""),
                 "CODIGO UNICO": reporte["psp_tin"],
+                "PY_CODIGO": reporte["PY_CODIGO"],
+                "SF_CODIGO": reporte["SF_CODIGO"],
                 "MONEDA": reporte.get("tx_currency_code", ""),
                 "RECAUDO": reporte["tx_amount_pago"],
                 "COMISION": reporte["comision_real"],
@@ -277,6 +284,8 @@ if archivo is not None:
                     "FECHA": "",
                     "SET_referencia": "TOTAL",
                     "CODIGO UNICO": "",
+                    "PY_CODIGO": "",
+                    "SF_CODIGO": "",
                     "MONEDA": "",
                     "RECAUDO": df["RECAUDO"].sum(),
                     "COMISION": df["COMISION"].sum(),
