@@ -254,7 +254,6 @@ if archivo is not None:
 
             reporte = comisiones.copy()
 
-            # Detectar códigos aunque estén en cualquier posición
             reporte["PY_CODIGO"] = reporte["tx_reference"].str.extract(r"(PY\d+)", expand=False)
             reporte["SF_CODIGO"] = reporte["tx_reference"].str.extract(r"(SF\d+)", expand=False)
 
@@ -264,7 +263,8 @@ if archivo is not None:
                     errors="coerce"
                 ).dt.strftime("%d/%m/%Y"),
                 "SET_referencia": reporte.get("set_referencia", ""),
-                "CODIGO UNICO": reporte["psp_tin"],
+                "CODIGO UNICO": reporte.get("deuda_external_id", ""),
+                "PSP_TIN": reporte["psp_tin"],
                 "PY_CODIGO": reporte["PY_CODIGO"],
                 "SF_CODIGO": reporte["SF_CODIGO"],
                 "MONEDA": reporte.get("tx_currency_code", ""),
@@ -281,6 +281,7 @@ if archivo is not None:
                     "FECHA": "",
                     "SET_referencia": "TOTAL",
                     "CODIGO UNICO": "",
+                    "PSP_TIN": "",
                     "PY_CODIGO": "",
                     "SF_CODIGO": "",
                     "MONEDA": "",
