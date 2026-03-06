@@ -234,32 +234,35 @@ if archivo is not None:
             total_recaudo = tabla["tx_amount_pago"].sum()
             total_comisiones = tabla["comision_real"].sum()
             total_base = tabla["comision_base"].sum()
-
-            # ✅ TU MODELO
             total_igv = tabla["igv"].sum()
             total_final = tabla["comision_final"].sum()
-
-            # ✅ IGV GLOBAL CONTABLE
-            igv_global = round(total_base * 0.18, 2)
-            total_global = round(total_base + igv_global, 2)
-
             total_neto = tabla["total_neto"].sum()
             operaciones = len(tabla)
 
-            c1,c2,c3 = st.columns(3)
-            c4,c5,c6 = st.columns(3)
+            c1, c2, c3 = st.columns(3)
+            c4, c5, c6 = st.columns(3)
 
             c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
             c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
             c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-            c4.metric("🏛 IGV Total (operaciones)", f"S/ {total_igv:,.2f}")
-            c5.metric("📑 Comisión Final (operaciones)", f"S/ {total_final:,.2f}")
+            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
             st.divider()
-            st.subheader("Control contable")
+            st.subheader("Resumen de condiciones aplicadas")
 
-            st.metric("🏛 IGV Global (Base × 18%)", f"S/ {igv_global:,.2f}")
-            st.metric("📑 Total Global Contable", f"S/ {total_global:,.2f}")
+            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+            total_usd = total_comisiones / tipo_cambio
+
+            st.info(
+                f"""
+💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
+equivalente a **US$ {total_usd:,.2f}**.
+
+Se aplicó una comisión de:
+**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
+"""
+            )
