@@ -11,6 +11,17 @@ archivo = st.file_uploader(
 )
 
 # ---------------------------
+# MODO DE USO
+# ---------------------------
+modo = st.radio(
+    "Modo de uso",
+    [
+        "📂 Solo preparar y descargar bases",
+        "📊 Análisis completo de comisiones"
+    ]
+)
+
+# ---------------------------
 # Exportar CSV
 # ---------------------------
 def exportar_csv(df):
@@ -23,8 +34,7 @@ def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            df = pd.read_csv(f, sep=sep, decimal=".", encoding="utf-8", low_memory=False)
-            return df
+            return pd.read_csv(f, sep=sep, decimal=".", encoding="utf-8", low_memory=False)
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
@@ -43,18 +53,17 @@ def cargar_archivo(file):
         with zipfile.ZipFile(file) as z:
             archivos = z.namelist()
 
-            archivos_csv = [n for n in archivos if n.lower().endswith(".csv")]
-            if archivos_csv:
-                with z.open(archivos_csv[0]) as f:
+            csvs = [n for n in archivos if n.lower().endswith(".csv")]
+            if csvs:
+                with z.open(csvs[0]) as f:
                     return leer_csv_seguro(f)
 
-            archivos_excel = [n for n in archivos if n.lower().endswith((".xlsx", ".xls"))]
-            if archivos_excel:
-                with z.open(archivos_excel[0]) as f:
+            excels = [n for n in archivos if n.lower().endswith((".xlsx", ".xls"))]
+            if excels:
+                with z.open(excels[0]) as f:
                     return pd.read_excel(f)
 
-            raise ValueError("El ZIP no contiene CSV ni Excel")
-
+            raise ValueError("ZIP sin CSV ni Excel")
     else:
         return pd.read_excel(file)
 
@@ -65,132 +74,159 @@ if archivo is not None:
 
     df = cargar_archivo(archivo)
     df.columns = df.columns.str.lower().str.strip()
-
     st.success("Archivo cargado correctamente")
+
+    if "psp_tin" not in df.columns or "tx_currency_code" not in df.columns:
+        st.error("Faltan columnas necesarias")
+        st.stop()
+
+    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
+
+    if "tx_reference" in df.columns:
+        df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
-    # ---------------------------
-    # COMISIONES
-    # ---------------------------
-    st.divider()
-    st.subheader("Comparación de comisiones")
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
-    porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
-    fee_fijo = st.number_input("Fee fijo (S/)", value=0.90, step=0.01)
-    aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
+    # ==================================================
+    # MODO 1 — SOLO DESCARGAS
+    # ==================================================
+    if modo == "📂 Solo preparar y descargar bases":
 
-    if "tx_reference" in df.columns and "tx_amount" in df.columns:
-
-        df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
-
-        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
-
-        comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
-            how="left",
-            suffixes=("_pago", "_comision")
-        )
-
-        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
-        comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
-
-        comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
-
-        # Comisión base
-        comisiones["comision_base"] = (
-            (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-        )
-
-        # IGV
-        comisiones["igv"] = comisiones["comision_base"] * 0.18
-
-        # Comisión final
-        if aplicar_igv:
-            comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
-        else:
-            comisiones["comision_final"] = comisiones["comision_base"]
-            comisiones["igv"] = 0
-
-        comisiones["comision_base"] = comisiones["comision_base"].round(2)
-        comisiones["igv"] = comisiones["igv"].round(2)
-        comisiones["comision_final"] = comisiones["comision_final"].round(2)
-
-        # Diferencia vs real
-        comisiones["diferencia"] = (
-            comisiones["comision_real"] - comisiones["comision_final"]
-        ).round(2)
-
-        # Neto
-        comisiones["total_neto"] = (
-            comisiones["tx_amount_pago"] - comisiones["comision_real"]
-        ).round(2)
-
-        tabla = comisiones[
-            [
-                "psp_tin",
-                "tx_amount_pago",
-                "comision_real",
-                "comision_base",
-                "igv",
-                "comision_final",
-                "diferencia",
-                "total_neto"
-            ]
-        ].fillna(0)
-
-        st.dataframe(tabla)
-
-        # Descargar
-        st.download_button(
-            "📥 Descargar comparación de comisiones",
-            exportar_csv(tabla),
-            "comparacion_comisiones.csv",
-            mime="text/csv"
-        )
-
-        # ---------------------------
-        # RESUMEN FINANCIERO
-        # ---------------------------
-        st.subheader("Resumen financiero")
-
-        total_recaudo = tabla["tx_amount_pago"].sum()
-        total_comisiones = tabla["comision_real"].sum()
-        total_base = tabla["comision_base"].sum()
-        total_igv = tabla["igv"].sum()
-        total_final = tabla["comision_final"].sum()
-        total_neto = tabla["total_neto"].sum()
-        operaciones = len(tabla)
+        st.subheader("Descargar resultados")
 
         c1, c2, c3 = st.columns(3)
-        c4, c5, c6 = st.columns(3)
 
-        c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-        c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-        c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-        c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-        c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-        c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+        with c1:
+            st.download_button(
+                "Descargar base sin duplicados",
+                exportar_csv(df_sin_duplicados),
+                "base_sin_duplicados.csv",
+                mime="text/csv"
+            )
 
-        st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+        with c2:
+            st.download_button(
+                "Descargar PEN",
+                exportar_csv(pen),
+                "registros_pen.csv",
+                mime="text/csv"
+            )
 
-        # ---------------------------
-        # RESUMEN EN USD
-        # ---------------------------
+        with c3:
+            st.download_button(
+                "Descargar USD",
+                exportar_csv(usd),
+                "registros_usd.csv",
+                mime="text/csv"
+            )
+
+    # ==================================================
+    # MODO 2 — ANALISIS COMPLETO
+    # ==================================================
+    if modo == "📊 Análisis completo de comisiones":
+
         st.divider()
-        st.subheader("Resumen de condiciones aplicadas")
+        st.subheader("Comparación de comisiones")
 
-        tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-        total_usd = total_comisiones / tipo_cambio
+        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
+        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90, step=0.01)
+        aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
-        st.info(
-            f"""
+        if "tx_reference" in df.columns and "tx_amount" in df.columns:
+
+            pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+            fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+
+            comisiones = pagos.merge(
+                fees[["psp_tin", "tx_amount"]],
+                on="psp_tin",
+                how="left",
+                suffixes=("_pago", "_comision")
+            )
+
+            comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
+            comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
+
+            comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+
+            comisiones["comision_base"] = (
+                (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
+            )
+
+            comisiones["igv"] = comisiones["comision_base"] * 0.18
+
+            if aplicar_igv:
+                comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
+            else:
+                comisiones["comision_final"] = comisiones["comision_base"]
+                comisiones["igv"] = 0
+
+            comisiones["comision_base"] = comisiones["comision_base"].round(2)
+            comisiones["igv"] = comisiones["igv"].round(2)
+            comisiones["comision_final"] = comisiones["comision_final"].round(2)
+
+            comisiones["diferencia"] = (
+                comisiones["comision_real"] - comisiones["comision_final"]
+            ).round(2)
+
+            comisiones["total_neto"] = (
+                comisiones["tx_amount_pago"] - comisiones["comision_real"]
+            ).round(2)
+
+            tabla = comisiones[
+                [
+                    "psp_tin","tx_amount_pago","comision_real",
+                    "comision_base","igv","comision_final",
+                    "diferencia","total_neto"
+                ]
+            ].fillna(0)
+
+            st.dataframe(tabla)
+
+            st.download_button(
+                "📥 Descargar comparación de comisiones",
+                exportar_csv(tabla),
+                "comparacion_comisiones.csv",
+                mime="text/csv"
+            )
+
+            st.subheader("Resumen financiero")
+
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+            operaciones = len(tabla)
+
+            c1,c2,c3 = st.columns(3)
+            c4,c5,c6 = st.columns(3)
+
+            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
+            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
+            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+
+            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+
+            st.divider()
+            st.subheader("Resumen de condiciones aplicadas")
+
+            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+            total_usd = total_comisiones / tipo_cambio
+
+            st.info(
+                f"""
 💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
 equivalente a **US$ {total_usd:,.2f}**.
 
 Se aplicó una comisión de:
 **{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
 """
-        )
+            )
