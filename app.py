@@ -230,9 +230,29 @@ if archivo is not None:
                 mime="text/csv"
             )
 
-            # ==================================================
-            # ✅ AGREGADO — REPORTE CONTABLE + ZIP
-            # ==================================================
+            st.subheader("Resumen financiero")
+
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+            operaciones = len(tabla)
+
+            c1, c2, c3 = st.columns(3)
+            c4, c5, c6 = st.columns(3)
+
+            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
+            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
+            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+
+            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+
+            # ================== AGREGADO ZIP ==================
 
             reporte = comisiones.copy()
 
@@ -281,4 +301,20 @@ if archivo is not None:
                 data=buffer,
                 file_name="reportes_contables.zip",
                 mime="application/zip"
+            )
+
+            st.divider()
+            st.subheader("Resumen de condiciones aplicadas")
+
+            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+            total_usd = total_comisiones / tipo_cambio
+
+            st.info(
+                f"""
+💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
+equivalente a **US$ {total_usd:,.2f}**.
+
+Se aplicó una comisión de:
+**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
+"""
             )
