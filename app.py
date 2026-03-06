@@ -47,7 +47,7 @@ def leer_csv_seguro(f):
     raise ValueError("No se pudo leer el CSV")
 
 # ---------------------------
-# Cargar archivo (ZIP inteligente)
+# Cargar archivo
 # ---------------------------
 @st.cache_data
 def cargar_archivo(file):
@@ -58,19 +58,14 @@ def cargar_archivo(file):
 
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
-            archivos = z.namelist()
-
-            for nombre_archivo in archivos:
+            for nombre_archivo in z.namelist():
                 if nombre_archivo.lower().endswith(".csv"):
                     with z.open(nombre_archivo) as f:
                         return leer_csv_seguro(f)
-
                 if nombre_archivo.lower().endswith((".xlsx", ".xls")):
                     with z.open(nombre_archivo) as f:
                         return pd.read_excel(f, engine="openpyxl")
-
         raise ValueError("ZIP sin CSV ni Excel")
-
     else:
         return pd.read_excel(file, engine="openpyxl")
 
@@ -83,87 +78,30 @@ if archivo is not None:
     df.columns = df.columns.str.lower().str.strip()
     st.success("Archivo cargado correctamente")
 
-    if "psp_tin" not in df.columns or "tx_currency_code" not in df.columns:
-        st.error("Faltan columnas necesarias")
+    if "psp_tin" not in df.columns:
+        st.error("Falta columna psp_tin")
         st.stop()
+
+    if "tx_currency_code" not in df.columns:
+        posibles = [c for c in df.columns if "currency" in c]
+        if posibles:
+            df.rename(columns={posibles[0]: "tx_currency_code"}, inplace=True)
+        else:
+            df["tx_currency_code"] = ""
 
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
 
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
-
-    pen_total = df[df["tx_currency_code"] == "PEN"]
-    usd_total = df[df["tx_currency_code"] == "USD"]
-
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
-
     # ==================================================
-    # BLOQUE BASES
-    # ==================================================
-    if modo in [
-        "📂 Solo preparar y descargar bases",
-        "🧩 Completo (descargas + análisis)"
-    ]:
-
-        st.subheader("Dashboard financiero")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total registros", len(df))
-        c2.metric("Columnas", len(df.columns))
-        c3.metric("Registros sin duplicados", len(df_sin_duplicados))
-
-        st.divider()
-
-        st.subheader("Separación por moneda")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("PEN totales (con duplicados)", len(pen_total))
-        c2.metric("USD totales (con duplicados)", len(usd_total))
-        c3.metric("PEN sin duplicados", len(pen))
-        c4.metric("USD sin duplicados", len(usd))
-
-        st.divider()
-
-        st.subheader("Descargar resultados")
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.download_button(
-                "Descargar base sin duplicados",
-                exportar_csv(df_sin_duplicados),
-                "base_sin_duplicados.csv",
-                mime="text/csv"
-            )
-
-        with c2:
-            st.download_button(
-                "Descargar PEN",
-                exportar_csv(pen),
-                "registros_pen.csv",
-                mime="text/csv"
-            )
-
-        with c3:
-            st.download_button(
-                "Descargar USD",
-                exportar_csv(usd),
-                "registros_usd.csv",
-                mime="text/csv"
-            )
-
-    # ==================================================
-    # BLOQUE COMISIONES
+    # COMISIONES
     # ==================================================
     if modo in [
         "📊 Análisis completo de comisiones",
         "🧩 Completo (descargas + análisis)"
     ]:
 
-        st.divider()
         st.subheader("Comparación de comisiones")
 
         porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
@@ -172,19 +110,19 @@ if archivo is not None:
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-            pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-            fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+            pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
+            fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+
+            pagos = pagos.rename(columns={"tx_amount": "tx_amount_pago"})
+            fees = fees.rename(columns={"tx_amount": "tx_amount_comision"})
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount"]],
+                fees[["psp_tin", "tx_amount_comision"]],
                 on="psp_tin",
-                how="left",
-                suffixes=("_pago", "_comision")
+                how="left"
             )
 
-            # ===============================
-            # AGREGAR MONEDA
-            # ===============================
+            # MONEDA segura
             moneda_map = df[["psp_tin","tx_currency_code"]].drop_duplicates("psp_tin")
             comisiones = comisiones.merge(moneda_map, on="psp_tin", how="left")
             comisiones.rename(columns={"tx_currency_code":"MONEDA"}, inplace=True)
