@@ -35,13 +35,19 @@ def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pd.read_csv(f, sep=sep, decimal=".", encoding="utf-8", low_memory=False)
+            return pd.read_csv(
+                f,
+                sep=sep,
+                decimal=".",
+                encoding="utf-8",
+                low_memory=False
+            )
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
 
 # ---------------------------
-# Cargar archivo
+# Cargar archivo (ZIP inteligente)
 # ---------------------------
 @st.cache_data
 def cargar_archivo(file):
@@ -54,19 +60,20 @@ def cargar_archivo(file):
         with zipfile.ZipFile(file) as z:
             archivos = z.namelist()
 
-            csvs = [n for n in archivos if n.lower().endswith(".csv")]
-            if csvs:
-                with z.open(csvs[0]) as f:
-                    return leer_csv_seguro(f)
+            for nombre_archivo in archivos:
 
-            excels = [n for n in archivos if n.lower().endswith((".xlsx", ".xls"))]
-            if excels:
-                with z.open(excels[0]) as f:
-                    return pd.read_excel(f)
+                if nombre_archivo.lower().endswith(".csv"):
+                    with z.open(nombre_archivo) as f:
+                        return leer_csv_seguro(f)
 
-            raise ValueError("ZIP sin CSV ni Excel")
+                if nombre_archivo.lower().endswith((".xlsx", ".xls")):
+                    with z.open(nombre_archivo) as f:
+                        return pd.read_excel(f, engine="openpyxl")
+
+        raise ValueError("ZIP sin CSV ni Excel")
+
     else:
-        return pd.read_excel(file)
+        return pd.read_excel(file, engine="openpyxl")
 
 # ---------------------------
 # PROCESAR
@@ -244,9 +251,6 @@ if archivo is not None:
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
-            # ==================================================
-            # RESUMEN DE CONDICIONES (AQUÍ ESTABA TU PROBLEMA)
-            # ==================================================
             st.divider()
             st.subheader("Resumen de condiciones aplicadas")
 
