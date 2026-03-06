@@ -61,7 +61,6 @@ def cargar_archivo(file):
             archivos = z.namelist()
 
             for nombre_archivo in archivos:
-
                 if nombre_archivo.lower().endswith(".csv"):
                     with z.open(nombre_archivo) as f:
                         return leer_csv_seguro(f)
@@ -183,6 +182,13 @@ if archivo is not None:
                 suffixes=("_pago", "_comision")
             )
 
+            # ===============================
+            # AGREGAR MONEDA
+            # ===============================
+            moneda_map = df[["psp_tin","tx_currency_code"]].drop_duplicates("psp_tin")
+            comisiones = comisiones.merge(moneda_map, on="psp_tin", how="left")
+            comisiones.rename(columns={"tx_currency_code":"MONEDA"}, inplace=True)
+
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
@@ -214,7 +220,7 @@ if archivo is not None:
 
             tabla = comisiones[
                 [
-                    "psp_tin","tx_amount_pago","comision_real",
+                    "psp_tin","MONEDA","tx_amount_pago","comision_real",
                     "comision_base","igv","comision_final",
                     "diferencia","total_neto"
                 ]
@@ -227,42 +233,4 @@ if archivo is not None:
                 exportar_csv(tabla),
                 "comparacion_comisiones.csv",
                 mime="text/csv"
-            )
-
-            st.subheader("Resumen financiero")
-
-            total_recaudo = tabla["tx_amount_pago"].sum()
-            total_comisiones = tabla["comision_real"].sum()
-            total_base = tabla["comision_base"].sum()
-            total_igv = tabla["igv"].sum()
-            total_final = tabla["comision_final"].sum()
-            total_neto = tabla["total_neto"].sum()
-            operaciones = len(tabla)
-
-            c1, c2, c3 = st.columns(3)
-            c4, c5, c6 = st.columns(3)
-
-            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
-
-            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-
-            st.divider()
-            st.subheader("Resumen de condiciones aplicadas")
-
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_comisiones / tipo_cambio
-
-            st.info(
-                f"""
-💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
-equivalente a **US$ {total_usd:,.2f}**.
-
-Se aplicó una comisión de:
-**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
-"""
             )
