@@ -104,7 +104,6 @@ if archivo is not None:
     st.subheader("Dashboard financiero")
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Total registros", len(df))
     c2.metric("Columnas", len(df.columns))
     c3.metric("Registros sin duplicados", len(df_sin_duplicados))
@@ -123,7 +122,6 @@ if archivo is not None:
     st.subheader("Separación por moneda")
 
     c1, c2, c3, c4 = st.columns(4)
-
     c1.metric("PEN totales (con duplicados)", len(pen_total))
     c2.metric("USD totales (con duplicados)", len(usd_total))
     c3.metric("PEN sin duplicados", len(pen))
@@ -169,18 +167,8 @@ if archivo is not None:
     st.divider()
     st.subheader("Comparación de comisiones")
 
-    porcentaje_contrato = st.number_input(
-        "Porcentaje comisión (%)",
-        value=2.30,
-        step=0.01
-    )
-
-    fee_fijo = st.number_input(
-        "Fee fijo",
-        value=0.90,
-        step=0.01
-    )
-
+    porcentaje_contrato = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
+    fee_fijo = st.number_input("Fee fijo", value=0.90, step=0.01)
     aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
 
     if "tx_reference" in df.columns and "tx_amount" in df.columns:
@@ -195,19 +183,13 @@ if archivo is not None:
             suffixes=("_pago", "_comision")
         )
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(
-            comisiones["tx_amount_pago"], errors="coerce"
-        )
-
-        comisiones["tx_amount_comision"] = pd.to_numeric(
-            comisiones["tx_amount_comision"], errors="coerce"
-        )
+        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
+        comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
         comisiones["comision"] = comisiones["tx_amount_comision"].abs()
 
         comisiones["comision_contrato"] = (
-            (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100))
-            + fee_fijo
+            (comisiones["tx_amount_pago"] * (porcentaje_contrato / 100)) + fee_fijo
         )
 
         if aplicar_igv:
@@ -220,13 +202,7 @@ if archivo is not None:
         ).round(2)
 
         tabla = comisiones[
-            [
-                "psp_tin",
-                "tx_amount_pago",
-                "comision",
-                "comision_contrato",
-                "diferencia"
-            ]
+            ["psp_tin", "tx_amount_pago", "comision", "comision_contrato", "diferencia"]
         ].fillna(0)
 
         tabla["total_neto"] = tabla["tx_amount_pago"] - tabla["comision"]
@@ -264,3 +240,22 @@ if archivo is not None:
         c4.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
         c5.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
         c6.metric("🔢 Número de Operaciones", f"{cantidad_operaciones:,}")
+
+        # ===============================
+        # RESUMEN FINAL EN USD
+        # ===============================
+        st.divider()
+        st.subheader("Resumen de condiciones aplicadas")
+
+        tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+        total_comisiones_usd = total_comisiones / tipo_cambio
+
+        st.info(
+            f"""
+💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
+equivalente a **US$ {total_comisiones_usd:,.2f}**.
+
+Por lo tanto, se está aplicando una comisión de:
+**{porcentaje_contrato:.2f}% + S/ {fee_fijo:.2f}** por transacción.
+"""
+        )
