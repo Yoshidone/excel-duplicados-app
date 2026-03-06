@@ -17,7 +17,8 @@ modo = st.radio(
     "Modo de uso",
     [
         "📂 Solo preparar y descargar bases",
-        "📊 Análisis completo de comisiones"
+        "📊 Análisis completo de comisiones",
+        "🧩 Completo (descargas + análisis)"
     ]
 )
 
@@ -87,13 +88,38 @@ if archivo is not None:
 
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
+
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
     # ==================================================
-    # MODO 1 — SOLO DESCARGAS
+    # BLOQUE BASES (DESCARGAS + MÉTRICAS)
     # ==================================================
-    if modo == "📂 Solo preparar y descargar bases":
+    if modo in [
+        "📂 Solo preparar y descargar bases",
+        "🧩 Completo (descargas + análisis)"
+    ]:
+
+        st.subheader("Dashboard financiero")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total registros", len(df))
+        c2.metric("Columnas", len(df.columns))
+        c3.metric("Registros sin duplicados", len(df_sin_duplicados))
+
+        st.divider()
+
+        st.subheader("Separación por moneda")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("PEN totales (con duplicados)", len(pen_total))
+        c2.metric("USD totales (con duplicados)", len(usd_total))
+        c3.metric("PEN sin duplicados", len(pen))
+        c4.metric("USD sin duplicados", len(usd))
+
+        st.divider()
 
         st.subheader("Descargar resultados")
 
@@ -124,9 +150,12 @@ if archivo is not None:
             )
 
     # ==================================================
-    # MODO 2 — ANALISIS COMPLETO
+    # BLOQUE COMISIONES
     # ==================================================
-    if modo == "📊 Análisis completo de comisiones":
+    if modo in [
+        "📊 Análisis completo de comisiones",
+        "🧩 Completo (descargas + análisis)"
+    ]:
 
         st.divider()
         st.subheader("Comparación de comisiones")
@@ -214,19 +243,3 @@ if archivo is not None:
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-
-            st.divider()
-            st.subheader("Resumen de condiciones aplicadas")
-
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_comisiones / tipo_cambio
-
-            st.info(
-                f"""
-💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
-equivalente a **US$ {total_usd:,.2f}**.
-
-Se aplicó una comisión de:
-**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
-"""
-            )
