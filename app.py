@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import zipfile
+from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 st.title("Analizador Financiero de Bases")
@@ -74,17 +75,6 @@ def cargar_archivo(file):
 
     else:
         return pd.read_excel(file, engine="openpyxl")
-
-# ---------------------------
-# FUNCIÓN AGREGAR FILA TOTAL
-# ---------------------------
-def agregar_totales(df):
-    totales = {col: "" for col in df.columns}
-    totales[df.columns[0]] = "TOTAL"
-    for col in df.select_dtypes(include="number").columns:
-        totales[col] = df[col].sum()
-    df_total = pd.concat([df, pd.DataFrame([totales])], ignore_index=True)
-    return df_total
 
 # ---------------------------
 # PROCESAR
@@ -233,50 +223,62 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
-            # ✅ AGREGADO: Totales al final del Excel
-            tabla_final = agregar_totales(tabla)
-
             st.download_button(
                 "📥 Descargar comparación de comisiones",
-                exportar_csv(tabla_final),
+                exportar_csv(tabla),
                 "comparacion_comisiones.csv",
                 mime="text/csv"
             )
 
-            st.subheader("Resumen financiero")
+            # ==================================================
+            # ✅ AGREGADO — REPORTE CONTABLE + ZIP
+            # ==================================================
 
-            total_recaudo = tabla["tx_amount_pago"].sum()
-            total_comisiones = tabla["comision_real"].sum()
-            total_base = tabla["comision_base"].sum()
-            total_igv = tabla["igv"].sum()
-            total_final = tabla["comision_final"].sum()
-            total_neto = tabla["total_neto"].sum()
-            operaciones = len(tabla)
+            reporte = comisiones.copy()
 
-            c1, c2, c3 = st.columns(3)
-            c4, c5, c6 = st.columns(3)
+            reporte_contable = pd.DataFrame({
+                "FECHA": pd.to_datetime(
+                    reporte.get("x_create_date_gmt_peru", ""),
+                    errors="coerce"
+                ).dt.strftime("%d/%m/%Y"),
+                "SET_referencia": reporte.get("set_referencia", ""),
+                "CODIGO UNICO": reporte["psp_tin"],
+                "MONEDA": reporte.get("tx_currency_code", ""),
+                "RECAUDO": reporte["tx_amount_pago"],
+                "COMISION": reporte["comision_real"],
+                "NETO": reporte["total_neto"]
+            }).fillna("")
 
-            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+            reporte_pen = reporte_contable[reporte_contable["MONEDA"] == "PEN"]
+            reporte_usd = reporte_contable[reporte_contable["MONEDA"] == "USD"]
 
-            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+            def agregar_totales(df):
+                totales = {
+                    "FECHA": "",
+                    "SET_referencia": "TOTAL",
+                    "CODIGO UNICO": "",
+                    "MONEDA": "",
+                    "RECAUDO": df["RECAUDO"].sum(),
+                    "COMISION": df["COMISION"].sum(),
+                    "NETO": df["NETO"].sum()
+                }
+                return pd.concat([df, pd.DataFrame([totales])], ignore_index=True)
+
+            reporte_pen_final = agregar_totales(reporte_pen)
+            reporte_usd_final = agregar_totales(reporte_usd)
+
+            buffer = BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr("reporte_contable_pen.csv", exportar_csv(reporte_pen_final))
+                z.writestr("reporte_contable_usd.csv", exportar_csv(reporte_usd_final))
+            buffer.seek(0)
 
             st.divider()
-            st.subheader("Resumen de condiciones aplicadas")
+            st.subheader("📦 Reportes contables")
 
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_comisiones / tipo_cambio
-
-            st.info(
-                f"""
-💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
-equivalente a **US$ {total_usd:,.2f}**.
-
-Se aplicó una comisión de:
-**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
-"""
+            st.download_button(
+                "📥 Descargar ZIP (PEN + USD)",
+                data=buffer,
+                file_name="reportes_contables.zip",
+                mime="application/zip"
             )
