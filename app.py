@@ -233,6 +233,16 @@ if archivo is not None:
 
         st.dataframe(tabla)
 
+        # ---------------------------
+        # Descargar comparación
+        # ---------------------------
+        st.download_button(
+            "📥 Descargar comparación de comisiones",
+            exportar_csv(tabla),
+            "comparacion_comisiones.csv",
+            mime="text/csv"
+        )
+
         # ===============================
         # TABLERO FINANCIERO
         # ===============================
@@ -243,12 +253,14 @@ if archivo is not None:
         total_contrato = tabla["comision_contrato"].sum()
         total_diferencia = tabla["diferencia"].sum()
         total_neto = tabla["total_neto"].sum()
+        cantidad_operaciones = len(tabla)
 
         c1, c2, c3 = st.columns(3)
-        c4, c5 = st.columns(2)
+        c4, c5, c6 = st.columns(3)
 
         c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
         c2.metric("💸 Total Comisiones", f"S/ {total_comisiones:,.2f}")
         c3.metric("📑 Total Comisión Contrato", f"S/ {total_contrato:,.2f}")
         c4.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
         c5.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+        c6.metric("🔢 Número de Operaciones", f"{cantidad_operaciones:,}")
