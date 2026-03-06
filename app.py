@@ -250,16 +250,13 @@ if archivo is not None:
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
-            # ================== AGREGADO FINAL ==================
+            # ================== REPORTE CONTABLE ==================
 
             reporte = comisiones.copy()
 
-            reporte["PY_CODIGO"] = reporte["tx_reference"].where(
-                reporte["tx_reference"].str.startswith("PY", na=False), ""
-            )
-            reporte["SF_CODIGO"] = reporte["tx_reference"].where(
-                reporte["tx_reference"].str.startswith("SF", na=False), ""
-            )
+            # Detectar códigos aunque estén en cualquier posición
+            reporte["PY_CODIGO"] = reporte["tx_reference"].str.extract(r"(PY\d+)", expand=False)
+            reporte["SF_CODIGO"] = reporte["tx_reference"].str.extract(r"(SF\d+)", expand=False)
 
             reporte_contable = pd.DataFrame({
                 "FECHA": pd.to_datetime(
