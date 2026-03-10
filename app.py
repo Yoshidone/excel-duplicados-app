@@ -199,24 +199,12 @@ if archivo is not None:
                 comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
 
-            comisiones["comision_base"] = comisiones["comision_base"].round(2)
-            comisiones["igv"] = comisiones["igv"].round(2)
-            comisiones["comision_final"] = comisiones["comision_final"].round(2)
-
-            comisiones["diferencia"] = (
-                comisiones["comision_real"] - comisiones["comision_final"]
-            ).round(2)
-
-            comisiones["total_neto"] = (
-                comisiones["tx_amount_pago"] - comisiones["comision_real"]
-            ).round(2)
+            comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
+            comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
             tabla = comisiones[
-                [
-                    "psp_tin","tx_amount_pago","comision_real",
-                    "comision_base","igv","comision_final",
-                    "diferencia","total_neto"
-                ]
+                ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+                 "comision_final","diferencia","total_neto"]
             ].fillna(0)
 
             st.dataframe(tabla)
@@ -247,36 +235,35 @@ if archivo is not None:
             c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
             c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
-
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
+            # ================= REPORTE MENSUAL =================
             st.divider()
-            st.subheader("Resumen de condiciones aplicadas")
+            st.subheader("📊 Reporte mensual")
 
-            # 📅 Mes desde tu columna exacta
-            mes_texto = "Mes no detectado"
             if "x_create_date_gmt_peru" in df.columns:
-                try:
-                    fechas = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-                    mes = fechas.dt.month.mode()[0]
-                    año = fechas.dt.year.mode()[0]
-                    meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                             "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-                    mes_texto = f"{meses[mes-1]} {año}"
-                except:
-                    pass
+                fechas = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
+                tabla["fecha"] = fechas
+                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
 
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_recaudo / tipo_cambio
+                meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
-            st.info(
-                f"""
-📅 Periodo analizado: **{mes_texto}**
+                tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
 
-💰 El total recaudado es de **S/ {total_recaudo:,.2f}**
-equivalente a **US$ {total_usd:,.2f}**.
+                for periodo, datos_mes in tabla.groupby("periodo"):
+                    año, mes = str(periodo).split("-")
+                    nombre_mes = meses_nombres[int(mes)-1]
 
-Se aplicó una comisión de:
-**{porcentaje:.2f}% + S/ {fee_fijo:.2f}** por transacción.
-"""
-            )
+                    recaudado_mes = datos_mes["tx_amount_pago"].sum()
+                    neto_mes = datos_mes["total_neto"].sum()
+                    operaciones_mes = len(datos_mes)
+                    usd_mes = recaudado_mes / tipo_cambio
+
+                    st.markdown(f"### 📅 {nombre_mes} {año}")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
+                    c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
+                    c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
+                    c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
+                    st.markdown("---")
