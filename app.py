@@ -176,7 +176,7 @@ if archivo is not None:
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount"]],
+                fees[["psp_tin", "tx_amount","x_create_date_gmt_peru"]],
                 on="psp_tin",
                 how="left",
                 suffixes=("_pago", "_comision")
@@ -209,49 +209,75 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
+            st.download_button(
+                "📥 Descargar comparación de comisiones",
+                exportar_csv(tabla),
+                "comparacion_comisiones.csv",
+                mime="text/csv"
+            )
+
+            # ================= RESUMEN FINANCIERO =================
+            st.subheader("Resumen financiero")
+
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+            operaciones = len(tabla)
+
+            c1, c2, c3 = st.columns(3)
+            c4, c5, c6 = st.columns(3)
+
+            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
+            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
+            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+
             # ================= REPORTE MENSUAL =================
             st.divider()
             st.subheader("📊 Reporte mensual")
 
-            if "x_create_date_gmt_peru" in df.columns:
+            tabla["fecha"] = pd.to_datetime(tabla["x_create_date_gmt_peru"], errors="coerce")
+            tabla["periodo"] = tabla["fecha"].dt.to_period("M")
 
-                tabla["fecha"] = pd.to_datetime(tabla["x_create_date_gmt_peru"], errors="coerce")
-                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
+            meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                             "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
-                meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+            st.markdown("### 💱 Tipo de cambio por mes")
 
-                # ===== TC DINÁMICO POR MES =====
-                st.markdown("### 💱 Tipo de cambio por mes")
+            periodos = sorted(tabla["periodo"].dropna().unique())
+            tc_por_mes = {}
 
-                periodos = sorted(tabla["periodo"].dropna().unique())
-                tc_por_mes = {}
+            for p in periodos:
+                tc_por_mes[str(p)] = st.number_input(
+                    f"TC {p}",
+                    min_value=0.0,
+                    value=3.75,
+                    step=0.001,
+                    format="%.3f"
+                )
 
-                for p in periodos:
-                    tc_por_mes[str(p)] = st.number_input(
-                        f"TC {p}",
-                        min_value=0.0,
-                        value=3.75,
-                        step=0.001,
-                        format="%.3f"
-                    )
+            for periodo, datos_mes in tabla.groupby("periodo"):
 
-                for periodo, datos_mes in tabla.groupby("periodo"):
+                año, mes = str(periodo).split("-")
+                nombre_mes = meses_nombres[int(mes)-1]
 
-                    año, mes = str(periodo).split("-")
-                    nombre_mes = meses_nombres[int(mes)-1]
+                recaudado_mes = datos_mes["tx_amount_pago"].sum()
+                neto_mes = datos_mes["total_neto"].sum()
+                operaciones_mes = len(datos_mes)
 
-                    recaudado_mes = datos_mes["tx_amount_pago"].sum()
-                    neto_mes = datos_mes["total_neto"].sum()
-                    operaciones_mes = len(datos_mes)
+                tc_mes = tc_por_mes.get(str(periodo), 3.75)
+                usd_mes = recaudado_mes / tc_mes
 
-                    tc_mes = tc_por_mes.get(str(periodo), 3.75)
-                    usd_mes = recaudado_mes / tc_mes
-
-                    st.markdown(f"### 📅 {nombre_mes} {año}")
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
-                    c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
-                    c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
-                    c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
-                    st.markdown("---")
+                st.markdown(f"### 📅 {nombre_mes} {año}")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
+                c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
+                c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
+                c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
+                st.markdown("---")
