@@ -224,10 +224,12 @@ if archivo is not None:
             total_igv = tabla["igv"].sum()
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
+            total_diferencia = tabla["diferencia"].sum()  # ✅ AGREGADO
             operaciones = len(tabla)
 
             c1, c2, c3 = st.columns(3)
             c4, c5, c6 = st.columns(3)
+            c7, _ , _ = st.columns(3)
 
             c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
             c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
@@ -236,6 +238,7 @@ if archivo is not None:
             c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+            c7.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")  # ✅ AGREGADO
 
             # ================= REPORTE MENSUAL =================
             st.divider()
@@ -260,13 +263,15 @@ if archivo is not None:
 
                     recaudado_mes = datos_mes["tx_amount_pago"].sum()
                     neto_mes = datos_mes["total_neto"].sum()
+                    diferencia_mes = datos_mes["diferencia"].sum()  # ✅ AGREGADO
                     operaciones_mes = len(datos_mes)
                     usd_mes = recaudado_mes / tipo_cambio
 
                     st.markdown(f"### 📅 {nombre_mes} {año}")
-                    c1, c2, c3, c4 = st.columns(4)
+                    c1, c2, c3, c4, c5 = st.columns(5)  # ✅ AGREGADO
                     c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
                     c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
                     c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
                     c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
+                    c5.metric("⚖️ Diferencia", f"S/ {diferencia_mes:,.2f}")  # ✅ AGREGADO
                     st.markdown("---")
