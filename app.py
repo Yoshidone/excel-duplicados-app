@@ -243,7 +243,10 @@ if archivo is not None:
 
             if "x_create_date_gmt_peru" in df.columns:
                 fechas = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-                tabla["fecha"] = fechas
+                tabla["fecha"] = pd.to_datetime(
+                    comisiones["x_create_date_gmt_peru"],
+                    errors="coerce"
+                )
                 tabla["periodo"] = tabla["fecha"].dt.to_period("M")
 
                 meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
@@ -267,3 +270,4 @@ if archivo is not None:
                     c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
                     c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
                     st.markdown("---")
+
