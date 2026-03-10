@@ -48,7 +48,7 @@ def leer_csv_seguro(f):
     raise ValueError("No se pudo leer el CSV")
 
 # ---------------------------
-# Cargar archivo (ZIP inteligente)
+# Cargar archivo
 # ---------------------------
 @st.cache_data
 def cargar_archivo(file):
@@ -250,75 +250,30 @@ if archivo is not None:
 
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
 
-            # ================== REPORTE CONTABLE ==================
-
-            reporte = comisiones.copy()
-
-            reporte["PY_CODIGO"] = reporte["tx_reference"].str.extract(r"(PY\d+)", expand=False)
-            reporte["SF_CODIGO"] = reporte["tx_reference"].str.extract(r"(SF\d+)", expand=False)
-
-            reporte_contable = pd.DataFrame({
-                "FECHA": pd.to_datetime(
-                    reporte.get("x_create_date_gmt_peru", ""),
-                    errors="coerce"
-                ).dt.strftime("%d/%m/%Y"),
-                "SET_referencia": reporte.get("set_referencia", ""),
-                "CODIGO UNICO": reporte.get("deuda_external_id", ""),
-                "PSP_TIN": reporte["psp_tin"],
-                "PY_CODIGO": reporte["PY_CODIGO"],
-                "SF_CODIGO": reporte["SF_CODIGO"],
-                "MONEDA": reporte.get("tx_currency_code", ""),
-                "RECAUDO": reporte["tx_amount_pago"],
-                "COMISION": reporte["comision_real"],
-                "NETO": reporte["total_neto"]
-            }).fillna("")
-
-            reporte_pen = reporte_contable[reporte_contable["MONEDA"] == "PEN"]
-            reporte_usd = reporte_contable[reporte_contable["MONEDA"] == "USD"]
-
-            def agregar_totales(df):
-                totales = {
-                    "FECHA": "",
-                    "SET_referencia": "TOTAL",
-                    "CODIGO UNICO": "",
-                    "PSP_TIN": "",
-                    "PY_CODIGO": "",
-                    "SF_CODIGO": "",
-                    "MONEDA": "",
-                    "RECAUDO": df["RECAUDO"].sum(),
-                    "COMISION": df["COMISION"].sum(),
-                    "NETO": df["NETO"].sum()
-                }
-                return pd.concat([df, pd.DataFrame([totales])], ignore_index=True)
-
-            reporte_pen_final = agregar_totales(reporte_pen)
-            reporte_usd_final = agregar_totales(reporte_usd)
-
-            buffer = BytesIO()
-            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
-                z.writestr("reporte_contable_pen.csv", exportar_csv(reporte_pen_final))
-                z.writestr("reporte_contable_usd.csv", exportar_csv(reporte_usd_final))
-            buffer.seek(0)
-
-            st.divider()
-            st.subheader("📦 Reportes contables")
-
-            st.download_button(
-                "📥 Descargar ZIP (PEN + USD)",
-                data=buffer,
-                file_name="reportes_contables.zip",
-                mime="application/zip"
-            )
-
             st.divider()
             st.subheader("Resumen de condiciones aplicadas")
 
+            # 📅 Mes desde tu columna exacta
+            mes_texto = "Mes no detectado"
+            if "x_create_date_gmt_peru" in df.columns:
+                try:
+                    fechas = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
+                    mes = fechas.dt.month.mode()[0]
+                    año = fechas.dt.year.mode()[0]
+                    meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                             "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+                    mes_texto = f"{meses[mes-1]} {año}"
+                except:
+                    pass
+
             tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-            total_usd = total_comisiones / tipo_cambio
+            total_usd = total_recaudo / tipo_cambio
 
             st.info(
                 f"""
-💬 El total de comisiones es de **S/ {total_comisiones:,.2f}**
+📅 Periodo analizado: **{mes_texto}**
+
+💰 El total recaudado es de **S/ {total_recaudo:,.2f}**
 equivalente a **US$ {total_usd:,.2f}**.
 
 Se aplicó una comisión de:
