@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import zipfile
 from io import BytesIO
@@ -200,7 +200,7 @@ if archivo is not None:
                 comisiones["igv"] = 0
 
             # ==============================
-            # REDONDEO POR OPERACIÓN (CLAVE)
+            # REDONDEO POR OPERACIÓN
             # ==============================
             comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].round(2)
             comisiones["comision_real"] = comisiones["comision_real"].round(2)
@@ -212,9 +212,15 @@ if archivo is not None:
             comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
             tabla = comisiones[
-                ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
-                 "comision_final","diferencia","total_neto"]
+                [
+                    "psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+                    "comision_final","diferencia","total_neto"
+                ]
             ].fillna(0)
+
+            # ✅ AGREGAR FECHA SIMPLE (SIN CAMBIAR LÓGICA)
+            if "x_create_date_gmt_peru" in pagos.columns:
+                tabla["x_create_date_gmt_peru"] = pagos["x_create_date_gmt_peru"].values
 
             st.dataframe(tabla)
 
@@ -226,11 +232,11 @@ if archivo is not None:
             )
 
             # ========= DESCARGA POR MESES =========
-            if "x_create_date_gmt_peru" in df.columns:
+            if "x_create_date_gmt_peru" in tabla.columns:
 
                 tabla_descarga = tabla.copy()
                 tabla_descarga["fecha"] = pd.to_datetime(
-                    comisiones["x_create_date_gmt_peru"],
+                    tabla_descarga["x_create_date_gmt_peru"],
                     errors="coerce"
                 )
                 tabla_descarga["periodo"] = tabla_descarga["fecha"].dt.to_period("M")
@@ -280,9 +286,9 @@ if archivo is not None:
             st.divider()
             st.subheader("📊 Reporte mensual")
 
-            if "x_create_date_gmt_peru" in df.columns:
+            if "x_create_date_gmt_peru" in tabla.columns:
                 tabla["fecha"] = pd.to_datetime(
-                    comisiones["x_create_date_gmt_peru"],
+                    tabla["x_create_date_gmt_peru"],
                     errors="coerce"
                 )
                 tabla["periodo"] = tabla["fecha"].dt.to_period("M")
