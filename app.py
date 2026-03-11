@@ -199,6 +199,15 @@ if archivo is not None:
                 comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
 
+            # ==============================
+            # REDONDEO POR OPERACIÓN (CLAVE)
+            # ==============================
+            comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].round(2)
+            comisiones["comision_real"] = comisiones["comision_real"].round(2)
+            comisiones["comision_base"] = comisiones["comision_base"].round(2)
+            comisiones["igv"] = comisiones["igv"].round(2)
+            comisiones["comision_final"] = comisiones["comision_final"].round(2)
+
             comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
             comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
@@ -242,6 +251,7 @@ if archivo is not None:
                     mime="application/zip"
                 )
 
+            # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
             total_recaudo = tabla["tx_amount_pago"].sum()
