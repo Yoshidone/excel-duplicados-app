@@ -176,7 +176,7 @@ if archivo is not None:
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount", "x_create_date_gmt_peru"]],
+                fees[["psp_tin", "tx_amount"]],
                 on="psp_tin",
                 how="left",
                 suffixes=("_pago", "_comision")
@@ -200,7 +200,7 @@ if archivo is not None:
                 comisiones["igv"] = 0
 
             # ==============================
-            # REDONDEO POR OPERACIÓN
+            # REDONDEO POR OPERACIÓN (CLAVE)
             # ==============================
             comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].round(2)
             comisiones["comision_real"] = comisiones["comision_real"].round(2)
@@ -211,12 +211,9 @@ if archivo is not None:
             comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
             comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
-            # ==============================
-            # TABLA FINAL (CON FECHA)
-            # ==============================
             tabla = comisiones[
-                ["x_create_date_gmt_peru","psp_tin","tx_amount_pago","comision_real",
-                 "comision_base","igv","comision_final","diferencia","total_neto"]
+                ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+                 "comision_final","diferencia","total_neto"]
             ].fillna(0)
 
             st.dataframe(tabla)
@@ -229,46 +226,30 @@ if archivo is not None:
             )
 
             # ========= DESCARGA POR MESES =========
-            tabla_descarga = tabla.copy()
+            if "x_create_date_gmt_peru" in df.columns:
 
-            tabla_descarga["fecha"] = pd.to_datetime(
-                tabla_descarga["x_create_date_gmt_peru"],
-                errors="coerce"
-            )
+                tabla_descarga = tabla.copy()
+                tabla_descarga["fecha"] = pd.to_datetime(
+                    comisiones["x_create_date_gmt_peru"],
+                    errors="coerce"
+                )
+                tabla_descarga["periodo"] = tabla_descarga["fecha"].dt.to_period("M")
 
-            tabla_descarga["periodo"] = tabla_descarga["fecha"].dt.to_period("M")
+                buffer_zip = BytesIO()
 
-            buffer_zip = BytesIO()
+                with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as z:
+                    for periodo, datos_mes in tabla_descarga.groupby("periodo"):
+                        nombre_archivo = f"comparacion_{periodo}.csv"
+                        z.writestr(nombre_archivo, exportar_csv(datos_mes.drop(columns=["fecha","periodo"])))
 
-            with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as z:
-                for periodo, datos_mes in tabla_descarga.groupby("periodo"):
+                buffer_zip.seek(0)
 
-                    nombre_archivo = f"comparacion_{periodo}.csv"
-
-                    columnas_ordenadas = [
-                        "x_create_date_gmt_peru",
-                        "psp_tin",
-                        "tx_amount_pago",
-                        "comision_real",
-                        "comision_base",
-                        "igv",
-                        "comision_final",
-                        "diferencia",
-                        "total_neto"
-                    ]
-
-                    datos_exportar = datos_mes[columnas_ordenadas]
-
-                    z.writestr(nombre_archivo, exportar_csv(datos_exportar))
-
-            buffer_zip.seek(0)
-
-            st.download_button(
-                "📥 Descargar comparaciones por meses (ZIP)",
-                data=buffer_zip,
-                file_name="comparaciones_mensuales.zip",
-                mime="application/zip"
-            )
+                st.download_button(
+                    "📥 Descargar comparaciones por meses (ZIP)",
+                    data=buffer_zip,
+                    file_name="comparaciones_mensuales.zip",
+                    mime="application/zip"
+                )
 
             # ================= RESUMEN =================
             st.subheader("Resumen financiero")
@@ -299,26 +280,33 @@ if archivo is not None:
             st.divider()
             st.subheader("📊 Reporte mensual")
 
-            meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                             "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+            if "x_create_date_gmt_peru" in df.columns:
+                tabla["fecha"] = pd.to_datetime(
+                    comisiones["x_create_date_gmt_peru"],
+                    errors="coerce"
+                )
+                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
 
-            tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
+                meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
-            for periodo, datos_mes in tabla_descarga.groupby("periodo"):
-                año, mes = str(periodo).split("-")
-                nombre_mes = meses_nombres[int(mes)-1]
+                tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
 
-                recaudado_mes = datos_mes["tx_amount_pago"].sum()
-                neto_mes = datos_mes["total_neto"].sum()
-                diferencia_mes = datos_mes["diferencia"].sum()
-                operaciones_mes = len(datos_mes)
-                usd_mes = recaudado_mes / tipo_cambio
+                for periodo, datos_mes in tabla.groupby("periodo"):
+                    año, mes = str(periodo).split("-")
+                    nombre_mes = meses_nombres[int(mes)-1]
 
-                st.markdown(f"### 📅 {nombre_mes} {año}")
-                c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
-                c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
-                c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
-                c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
-                c5.metric("⚖️ Diferencia", f"S/ {diferencia_mes:,.2f}")
-                st.markdown("---")
+                    recaudado_mes = datos_mes["tx_amount_pago"].sum()
+                    neto_mes = datos_mes["total_neto"].sum()
+                    diferencia_mes = datos_mes["diferencia"].sum()
+                    operaciones_mes = len(datos_mes)
+                    usd_mes = recaudado_mes / tipo_cambio
+
+                    st.markdown(f"### 📅 {nombre_mes} {año}")
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
+                    c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
+                    c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
+                    c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
+                    c5.metric("⚖️ Diferencia", f"S/ {diferencia_mes:,.2f}")
+                    st.markdown("---")
