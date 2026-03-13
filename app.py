@@ -182,6 +182,9 @@ if archivo is not None:
                 suffixes=("_pago", "_comision")
             )
 
+            # AGREGADO (para que aparezca PEN / USD en la comparación)
+            comisiones["tx_currency_code"] = pagos["tx_currency_code"].values
+
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
@@ -213,8 +216,15 @@ if archivo is not None:
 
             tabla = comisiones[
                 [
-                    "psp_tin","tx_amount_pago","comision_real","comision_base","igv",
-                    "comision_final","diferencia","total_neto"
+                    "psp_tin",
+                    "tx_amount_pago",
+                    "tx_currency_code",  # AGREGADO
+                    "comision_real",
+                    "comision_base",
+                    "igv",
+                    "comision_final",
+                    "diferencia",
+                    "total_neto"
                 ]
             ].fillna(0)
 
