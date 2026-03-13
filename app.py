@@ -182,8 +182,6 @@ if archivo is not None:
                 suffixes=("_pago", "_comision")
             )
 
-            comisiones["tx_currency_code"] = pagos["tx_currency_code"].values
-
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
@@ -201,41 +199,7 @@ if archivo is not None:
                 comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
 
-            comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].round(2)
-            comisiones["comision_real"] = comisiones["comision_real"].round(2)
-            comisiones["comision_base"] = comisiones["comision_base"].round(2)
-            comisiones["igv"] = comisiones["igv"].round(2)
-            comisiones["comision_final"] = comisiones["comision_final"].round(2)
-
-            comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
-            comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
-
-            tabla = comisiones[
-                [
-                    "psp_tin",
-                    "tx_amount_pago",
-                    "tx_currency_code",
-                    "comision_real",
-                    "comision_base",
-                    "igv",
-                    "comision_final",
-                    "diferencia",
-                    "total_neto"
-                ]
-            ].fillna(0)
-
-            if "x_create_date_gmt_peru" in pagos.columns:
-                tabla["x_create_date_gmt_peru"] = pagos["x_create_date_gmt_peru"].values
-
-            st.dataframe(tabla)
-
-            st.download_button(
-                "📥 Descargar comparación de comisiones",
-                exportar_csv(tabla),
-                "comparacion_comisiones.csv",
-                mime="text/csv"
-            )
- # ==============================
+            # ==============================
             # REDONDEO POR OPERACIÓN
             # ==============================
             comisiones["tx_amount_pago"] = comisiones["tx_amount_pago"].round(2)
