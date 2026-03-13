@@ -176,12 +176,14 @@ if archivo is not None:
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
             comisiones = pagos.merge(
-                fees[["psp_tin", "tx_amount"]],
-                on="psp_tin",
-                how="left",
-                suffixes=("_pago", "_comision")
+             fees[["psp_tin", "tx_amount"]],
+             on="psp_tin",
+             how="left",
+             suffixes=("_pago", "_comision")
             )
 
+            comisiones["tx_currency_code"] = pagos["tx_currency_code"].values
+            
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
