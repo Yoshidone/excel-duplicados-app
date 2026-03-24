@@ -27,13 +27,7 @@ def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pd.read_csv(
-                f,
-                sep=sep,
-                decimal=".",
-                encoding="utf-8",
-                low_memory=False
-            )
+            return pd.read_csv(f, sep=sep, decimal=".", encoding="utf-8", low_memory=False)
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
@@ -120,28 +114,13 @@ if archivo is not None:
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.download_button(
-                "Descargar base sin duplicados",
-                exportar_csv(df_sin_duplicados),
-                "base_sin_duplicados.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
 
         with c2:
-            st.download_button(
-                "Descargar PEN",
-                exportar_csv(pen),
-                "registros_pen.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
 
         with c3:
-            st.download_button(
-                "Descargar USD",
-                exportar_csv(usd),
-                "registros_usd.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
     # ==================================================
     # BLOQUE COMISIONES
@@ -154,9 +133,9 @@ if archivo is not None:
         st.divider()
         st.subheader("Comparación de comisiones")
 
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
-        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90, step=0.01)
-        aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
+        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
+        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90)
+        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
@@ -174,11 +153,7 @@ if archivo is not None:
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
             comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
-
-            comisiones["comision_base"] = (
-                (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-            )
-
+            comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
             comisiones["igv"] = comisiones["comision_base"] * 0.18
 
             if aplicar_igv:
@@ -205,23 +180,12 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
-            st.download_button(
-                "📥 Descargar comparación de comisiones",
-                exportar_csv(tabla),
-                "comparacion_comisiones.csv",
-                mime="text/csv"
-            )
+            st.download_button("📥 Descargar", exportar_csv(tabla), "comisiones.csv")
 
             # ================= FILTRO =================
             if "periodo" in tabla.columns:
                 meses = sorted(tabla["periodo"].dropna().astype(str).unique())
-
-                meses_sel = st.multiselect(
-                    "📅 Filtrar por mes",
-                    meses,
-                    default=meses
-                )
-
+                meses_sel = st.multiselect("📅 Filtrar por mes", meses, default=meses)
                 tabla_filtrada = tabla[tabla["periodo"].astype(str).isin(meses_sel)]
             else:
                 tabla_filtrada = tabla.copy()
@@ -235,7 +199,9 @@ if archivo is not None:
             total_igv = tabla_filtrada["igv"].sum()
             total_final = tabla_filtrada["comision_final"].sum()
             total_neto = tabla_filtrada["total_neto"].sum()
-            operaciones = len(tabla_filtrada)
+
+            # 🔥 FIX IMPORTANTE (SIN DUPLICADOS)
+            operaciones = tabla_filtrada["psp_tin"].nunique()
 
             c1, c2, c3 = st.columns(3)
             c4, c5, c6 = st.columns(3)
