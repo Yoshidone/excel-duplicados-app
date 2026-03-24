@@ -27,13 +27,7 @@ def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pd.read_csv(
-                f,
-                sep=sep,
-                decimal=".",
-                encoding="utf-8",
-                low_memory=False
-            )
+            return pd.read_csv(f, sep=sep, decimal=".", encoding="utf-8", low_memory=False)
         except:
             continue
     raise ValueError("No se pudo leer el CSV")
@@ -144,7 +138,7 @@ if archivo is not None:
             )
 
     # ==================================================
-    # BLOQUE COMISIONES (FIX APLICADO 🔥)
+    # BLOQUE COMISIONES (FIX 🔥)
     # ==================================================
     if modo in [
         "📊 Análisis completo de comisiones",
@@ -163,7 +157,6 @@ if archivo is not None:
             pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-            # 🔥 limpiar duplicados
             pagos_clean = pagos.drop_duplicates(subset="psp_tin")
             fees_clean = fees.drop_duplicates(subset="psp_tin")
 
@@ -174,14 +167,28 @@ if archivo is not None:
                 suffixes=("_pago", "_comision")
             )
 
-            # ✅ FIX REAL (REEMPLAZA TU ERROR)
+            # ✅ FIX moneda
             comisiones = comisiones.merge(
                 pagos_clean[["psp_tin", "tx_currency_code"]],
                 on="psp_tin",
-                how="left"
+                how="left",
+                suffixes=("", "_dup")
             )
 
-            # ================= CÁLCULOS =================
+            if "tx_currency_code_dup" in comisiones.columns:
+                comisiones.drop(columns=["tx_currency_code_dup"], inplace=True)
+
+            # ✅ FIX fecha
+            if "tx_create_date_gmt_peru" in pagos_clean.columns:
+                fechas = pagos_clean[["psp_tin", "tx_create_date_gmt_peru"]].drop_duplicates()
+
+                comisiones = comisiones.merge(
+                    fechas,
+                    on="psp_tin",
+                    how="left"
+                )
+
+            # ================= cálculos =================
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
@@ -199,7 +206,6 @@ if archivo is not None:
                 comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
 
-            # ================= REDONDEO =================
             for col in ["tx_amount_pago","comision_real","comision_base","igv","comision_final"]:
                 comisiones[col] = comisiones[col].round(2)
 
