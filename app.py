@@ -11,9 +11,6 @@ archivo = st.file_uploader(
     type=["xlsx", "csv", "zip"]
 )
 
-# ---------------------------
-# MODO DE USO
-# ---------------------------
 modo = st.radio(
     "Modo de uso",
     [
@@ -23,15 +20,9 @@ modo = st.radio(
     ]
 )
 
-# ---------------------------
-# Exportar CSV
-# ---------------------------
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
-# ---------------------------
-# Leer CSV seguro
-# ---------------------------
 def leer_csv_seguro(f):
     for sep in [",", ";"]:
         try:
@@ -47,9 +38,6 @@ def leer_csv_seguro(f):
             continue
     raise ValueError("No se pudo leer el CSV")
 
-# ---------------------------
-# Cargar archivo
-# ---------------------------
 @st.cache_data
 def cargar_archivo(file):
     nombre = file.name.lower()
@@ -207,6 +195,14 @@ if archivo is not None:
                  "comision_final","diferencia","total_neto"]
             ].fillna(0)
 
+            # ================= FECHA =================
+            if "tx_create_date_gmt_peru" in df.columns:
+                tabla["fecha"] = pd.to_datetime(
+                    df.loc[tabla.index, "tx_create_date_gmt_peru"],
+                    errors="coerce"
+                )
+                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
+
             st.dataframe(tabla)
 
             st.download_button(
@@ -216,15 +212,30 @@ if archivo is not None:
                 mime="text/csv"
             )
 
+            # ================= FILTRO =================
+            if "periodo" in tabla.columns:
+                meses = sorted(tabla["periodo"].dropna().astype(str).unique())
+
+                meses_sel = st.multiselect(
+                    "📅 Filtrar por mes",
+                    meses,
+                    default=meses
+                )
+
+                tabla_filtrada = tabla[tabla["periodo"].astype(str).isin(meses_sel)]
+            else:
+                tabla_filtrada = tabla.copy()
+
+            # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
-            total_recaudo = tabla["tx_amount_pago"].sum()
-            total_comisiones = tabla["comision_real"].sum()
-            total_base = tabla["comision_base"].sum()
-            total_igv = tabla["igv"].sum()
-            total_final = tabla["comision_final"].sum()
-            total_neto = tabla["total_neto"].sum()
-            operaciones = len(tabla)
+            total_recaudo = tabla_filtrada["tx_amount_pago"].sum()
+            total_comisiones = tabla_filtrada["comision_real"].sum()
+            total_base = tabla_filtrada["comision_base"].sum()
+            total_igv = tabla_filtrada["igv"].sum()
+            total_final = tabla_filtrada["comision_final"].sum()
+            total_neto = tabla_filtrada["total_neto"].sum()
+            operaciones = len(tabla_filtrada)
 
             c1, c2, c3 = st.columns(3)
             c4, c5, c6 = st.columns(3)
@@ -236,37 +247,3 @@ if archivo is not None:
             c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
             c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-
-            # ================= REPORTE MENSUAL =================
-            st.divider()
-            st.subheader("📊 Reporte mensual")
-
-            if "x_create_date_gmt_peru" in df.columns:
-                fechas = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-                tabla["fecha"] = pd.to_datetime(
-                    comisiones["x_create_date_gmt_peru"],
-                    errors="coerce"
-                )
-                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
-
-                meses_nombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-
-                tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-
-                for periodo, datos_mes in tabla.groupby("periodo"):
-                    año, mes = str(periodo).split("-")
-                    nombre_mes = meses_nombres[int(mes)-1]
-
-                    recaudado_mes = datos_mes["tx_amount_pago"].sum()
-                    neto_mes = datos_mes["total_neto"].sum()
-                    operaciones_mes = len(datos_mes)
-                    usd_mes = recaudado_mes / tipo_cambio
-
-                    st.markdown(f"### 📅 {nombre_mes} {año}")
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
-                    c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
-                    c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
-                    c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
-                    st.markdown("---")
