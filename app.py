@@ -67,7 +67,7 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= FECHA GLOBAL =================
+    # ================= FILTRO POR MES (ANTES DEL MERGE 🔥) =================
     if "tx_create_date_gmt_peru" in df.columns:
         df["fecha"] = pd.to_datetime(df["tx_create_date_gmt_peru"], errors="coerce")
         df["periodo"] = df["fecha"].dt.to_period("M")
@@ -82,6 +82,9 @@ if archivo is not None:
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
+
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -93,6 +96,30 @@ if archivo is not None:
         c1.metric("Total registros", len(df))
         c2.metric("Columnas", len(df.columns))
         c3.metric("Registros sin duplicados", len(df_sin_duplicados))
+
+        st.divider()
+        st.subheader("Separación por moneda")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("PEN totales", len(pen_total))
+        c2.metric("USD totales", len(usd_total))
+        c3.metric("PEN sin duplicados", len(pen))
+        c4.metric("USD sin duplicados", len(usd))
+
+        # 🔥 DESCARGAS BASES
+        st.divider()
+        st.subheader("Descargar resultados")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
+
+        with c2:
+            st.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
+
+        with c3:
+            st.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
     # ================= COMISIONES =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
@@ -106,7 +133,6 @@ if archivo is not None:
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-            # 🔥 YA FILTRADO POR MES
             pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
@@ -140,6 +166,9 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
+            # 🔥 DESCARGA COMISIONES
+            st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
+
             # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
@@ -150,7 +179,7 @@ if archivo is not None:
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
 
-            # 🔥 SOLO PY (OPERACIONES REALES)
+            # 🔥 SOLO PY = OPERACIONES REALES
             operaciones = pagos["psp_tin"].nunique()
 
             c1, c2, c3 = st.columns(3)
