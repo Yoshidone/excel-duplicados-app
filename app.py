@@ -1,15 +1,11 @@
 import streamlit as st
 import pandas as pd
 import zipfile
-from io import BytesIO
 
 st.set_page_config(page_title="Analizador Financiero", layout="wide")
 st.title("Analizador Financiero de Bases")
 
-archivo = st.file_uploader(
-    "Sube tu archivo Excel, CSV o ZIP",
-    type=["xlsx", "csv", "zip"]
-)
+archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
 
 modo = st.radio(
     "Modo de uso",
@@ -42,7 +38,6 @@ def cargar_archivo(file):
     elif nombre.endswith(".zip"):
         with zipfile.ZipFile(file) as z:
             for nombre_archivo in z.namelist():
-
                 if nombre_archivo.lower().endswith(".csv"):
                     with z.open(nombre_archivo) as f:
                         return leer_csv_seguro(f)
@@ -56,9 +51,7 @@ def cargar_archivo(file):
     else:
         return pd.read_excel(file, engine="openpyxl")
 
-# ---------------------------
-# PROCESAR
-# ---------------------------
+# ================= PROCESAR =================
 if archivo is not None:
 
     df = cargar_archivo(archivo)
@@ -74,21 +67,25 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
+    # ================= FECHA GLOBAL =================
+    if "tx_create_date_gmt_peru" in df.columns:
+        df["fecha"] = pd.to_datetime(df["tx_create_date_gmt_peru"], errors="coerce")
+        df["periodo"] = df["fecha"].dt.to_period("M")
 
-    pen_total = df[df["tx_currency_code"] == "PEN"]
-    usd_total = df[df["tx_currency_code"] == "USD"]
+        meses = sorted(df["periodo"].dropna().astype(str).unique())
+
+        meses_sel = st.multiselect("📅 Filtrar por mes", meses, default=meses)
+
+        if meses_sel:
+            df = df[df["periodo"].astype(str).isin(meses_sel)]
+
+    # ================= BASES =================
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
-    # ==================================================
-    # BLOQUE BASES
-    # ==================================================
-    if modo in [
-        "📂 Solo preparar y descargar bases",
-        "🧩 Completo (descargas + análisis)"
-    ]:
+    if modo in ["📂 Solo preparar y descargar bases", "🧩 Completo (descargas + análisis)"]:
 
         st.subheader("Dashboard financiero")
 
@@ -97,23 +94,8 @@ if archivo is not None:
         c2.metric("Columnas", len(df.columns))
         c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
-        st.divider()
-
-        st.subheader("Separación por moneda")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("PEN totales", len(pen_total))
-        c2.metric("USD totales", len(usd_total))
-        c3.metric("PEN sin duplicados", len(pen))
-        c4.metric("USD sin duplicados", len(usd))
-
-    # ==================================================
-    # BLOQUE COMISIONES
-    # ==================================================
-    if modo in [
-        "📊 Análisis completo de comisiones",
-        "🧩 Completo (descargas + análisis)"
-    ]:
+    # ================= COMISIONES =================
+    if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
         st.subheader("Comparación de comisiones")
@@ -124,6 +106,7 @@ if archivo is not None:
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
+            # 🔥 YA FILTRADO POR MES
             pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
@@ -155,48 +138,20 @@ if archivo is not None:
                  "comision_final","diferencia","total_neto"]
             ].fillna(0)
 
-            # ================= FECHA =================
-            if "tx_create_date_gmt_peru" in df.columns:
-                tabla["fecha"] = pd.to_datetime(
-                    df.loc[tabla.index, "tx_create_date_gmt_peru"],
-                    errors="coerce"
-                )
-                tabla["periodo"] = tabla["fecha"].dt.to_period("M")
-
             st.dataframe(tabla)
-
-            st.download_button("📥 Descargar", exportar_csv(tabla), "comisiones.csv")
-
-            # ================= FILTRO =================
-            if "periodo" in tabla.columns:
-                meses = sorted(tabla["periodo"].dropna().astype(str).unique())
-                meses_sel = st.multiselect("📅 Filtrar por mes", meses, default=meses)
-                tabla_filtrada = tabla[tabla["periodo"].astype(str).isin(meses_sel)]
-            else:
-                tabla_filtrada = tabla.copy()
-
-            # ================= OPERACIONES REALES (PY) =================
-            if "tx_create_date_gmt_peru" in df.columns:
-                pagos["fecha"] = pd.to_datetime(
-                    df.loc[pagos.index, "tx_create_date_gmt_peru"],
-                    errors="coerce"
-                )
-                pagos["periodo"] = pagos["fecha"].dt.to_period("M")
-
-                pagos_filtrados = pagos[pagos["periodo"].astype(str).isin(meses_sel)]
-                operaciones = pagos_filtrados["psp_tin"].nunique()
-            else:
-                operaciones = pagos["psp_tin"].nunique()
 
             # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
-            total_recaudo = tabla_filtrada["tx_amount_pago"].sum()
-            total_comisiones = tabla_filtrada["comision_real"].sum()
-            total_base = tabla_filtrada["comision_base"].sum()
-            total_igv = tabla_filtrada["igv"].sum()
-            total_final = tabla_filtrada["comision_final"].sum()
-            total_neto = tabla_filtrada["total_neto"].sum()
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+
+            # 🔥 SOLO PY (OPERACIONES REALES)
+            operaciones = pagos["psp_tin"].nunique()
 
             c1, c2, c3 = st.columns(3)
             c4, c5, c6 = st.columns(3)
