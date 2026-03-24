@@ -303,3 +303,55 @@ if "tx_create_date_gmt_peru" in comisiones.columns:
         c5.metric("⚖️ Diferencia", f"S/ {diferencia_mes:,.2f}")
 
         st.markdown("---")
+# ================= RESUMEN MENSUAL TOTAL =================
+st.divider()
+st.subheader("📊 Resumen financiero mensual")
+
+if "tx_create_date_gmt_peru" in comisiones.columns:
+
+    resumen_mensual = comisiones.copy()
+
+    resumen_mensual["fecha"] = pd.to_datetime(
+        resumen_mensual["tx_create_date_gmt_peru"],
+        errors="coerce"
+    )
+
+    resumen_mensual["periodo"] = resumen_mensual["fecha"].dt.to_period("M")
+
+    meses_nombres = [
+        "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+        "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+    ]
+
+    for periodo, datos_mes in resumen_mensual.groupby("periodo"):
+
+        año, mes = str(periodo).split("-")
+        nombre_mes = meses_nombres[int(mes)-1]
+
+        total_recaudo = datos_mes["tx_amount_pago"].sum()
+        total_comisiones = datos_mes["comision_real"].sum()
+        total_base = datos_mes["comision_base"].sum()
+        total_igv = datos_mes["igv"].sum()
+        total_final = datos_mes["comision_final"].sum()
+        total_neto = datos_mes["total_neto"].sum()
+        total_diferencia = datos_mes["diferencia"].sum()
+        operaciones = len(datos_mes)
+
+        st.markdown(f"### 📅 {nombre_mes} {año}")
+
+        c1, c2, c3 = st.columns(3)
+        c4, c5, c6 = st.columns(3)
+        c7, _, _ = st.columns(3)
+
+        c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
+        c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
+        c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
+
+        c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
+        c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
+        c6.metric("🔢 Operaciones", f"{operaciones:,}")
+
+        st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+        c7.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
+
+        st.markdown("---")
