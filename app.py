@@ -114,31 +114,16 @@ if archivo is not None:
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.download_button(
-                "Descargar base sin duplicados",
-                exportar_csv(df_sin_duplicados),
-                "base_sin_duplicados.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
 
         with c2:
-            st.download_button(
-                "Descargar PEN",
-                exportar_csv(pen),
-                "registros_pen.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
 
         with c3:
-            st.download_button(
-                "Descargar USD",
-                exportar_csv(usd),
-                "registros_usd.csv",
-                mime="text/csv"
-            )
+            st.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
     # ==================================================
-    # BLOQUE COMISIONES (FIX 🔥)
+    # BLOQUE COMISIONES
     # ==================================================
     if modo in [
         "📊 Análisis completo de comisiones",
@@ -148,63 +133,40 @@ if archivo is not None:
         st.divider()
         st.subheader("Comparación de comisiones")
 
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30, step=0.01)
-        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90, step=0.01)
-        aplicar_igv = st.checkbox("Aplicar IGV (18%)", value=True)
+        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
+        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90)
+        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
             pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
             fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-            pagos_clean = pagos.drop_duplicates(subset="psp_tin")
-            fees_clean = fees.drop_duplicates(subset="psp_tin")
+            pagos = pagos.drop_duplicates(subset="psp_tin")
+            fees = fees.drop_duplicates(subset="psp_tin")
 
-            comisiones = pagos_clean.merge(
-                fees_clean[["psp_tin", "tx_amount"]],
+            comisiones = pagos.merge(
+                fees[["psp_tin", "tx_amount"]],
                 on="psp_tin",
                 how="left",
                 suffixes=("_pago", "_comision")
             )
 
-            # ✅ FIX moneda
             comisiones = comisiones.merge(
-                pagos_clean[["psp_tin", "tx_currency_code"]],
+                pagos[["psp_tin", "tx_currency_code", "tx_create_date_gmt_peru"]],
                 on="psp_tin",
-                how="left",
-                suffixes=("", "_dup")
+                how="left"
             )
 
-            if "tx_currency_code_dup" in comisiones.columns:
-                comisiones.drop(columns=["tx_currency_code_dup"], inplace=True)
-
-            # ✅ FIX fecha
-            if "tx_create_date_gmt_peru" in pagos_clean.columns:
-                fechas = pagos_clean[["psp_tin", "tx_create_date_gmt_peru"]].drop_duplicates()
-
-                comisiones = comisiones.merge(
-                    fechas,
-                    on="psp_tin",
-                    how="left"
-                )
-
-            # ================= cálculos =================
+            # cálculos
             comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
             comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
             comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
-
-            comisiones["comision_base"] = (
-                (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-            )
-
+            comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
             comisiones["igv"] = comisiones["comision_base"] * 0.18
 
-            if aplicar_igv:
-                comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
-            else:
-                comisiones["comision_final"] = comisiones["comision_base"]
-                comisiones["igv"] = 0
+            comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"] if aplicar_igv else comisiones["comision_base"]
 
             for col in ["tx_amount_pago","comision_real","comision_base","igv","comision_final"]:
                 comisiones[col] = comisiones[col].round(2)
@@ -213,145 +175,34 @@ if archivo is not None:
             comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
             tabla = comisiones[
-                [
-                    "psp_tin",
-                    "tx_amount_pago",
-                    "tx_currency_code",
-                    "comision_real",
-                    "comision_base",
-                    "igv",
-                    "comision_final",
-                    "diferencia",
-                    "total_neto"
-                ]
+                ["psp_tin","tx_amount_pago","tx_currency_code","comision_real","comision_base","igv","comision_final","diferencia","total_neto","tx_create_date_gmt_peru"]
             ].fillna(0)
 
             st.dataframe(tabla)
 
-            st.download_button(
-                "📥 Descargar comparación de comisiones",
-                exportar_csv(tabla),
-                "comparacion_comisiones.csv",
-                mime="text/csv"
-            )
-# ================= RESUMEN =================
-st.subheader("Resumen financiero")
+            st.download_button("Descargar", exportar_csv(tabla), "comisiones.csv")
 
-total_recaudo = tabla["tx_amount_pago"].sum()
-total_comisiones = tabla["comision_real"].sum()
-total_base = tabla["comision_base"].sum()
-total_igv = tabla["igv"].sum()
-total_final = tabla["comision_final"].sum()
-total_neto = tabla["total_neto"].sum()
-total_diferencia = tabla["diferencia"].sum()
-operaciones = len(tabla)
+            # ================= RESUMEN =================
+            st.subheader("Resumen financiero")
 
-c1, c2, c3 = st.columns(3)
-c4, c5, c6 = st.columns(3)
-c7, _, _ = st.columns(3)
+            st.metric("💰 Recaudado", f"S/ {tabla['tx_amount_pago'].sum():,.2f}")
+            st.metric("💸 Comisiones", f"S/ {tabla['comision_real'].sum():,.2f}")
+            st.metric("🧮 Neto", f"S/ {tabla['total_neto'].sum():,.2f}")
 
-c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
-st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-c7.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
+            # ================= FILTRO MES =================
+            tabla["fecha"] = pd.to_datetime(tabla["tx_create_date_gmt_peru"], errors="coerce")
+            tabla["periodo"] = tabla["fecha"].dt.to_period("M")
 
-# ================= REPORTE MENSUAL =================
-st.divider()
-st.subheader("📊 Reporte mensual")
+            meses = sorted(tabla["periodo"].dropna().astype(str).unique())
+            seleccion = st.multiselect("Filtrar meses", meses, default=meses)
 
-if "tx_create_date_gmt_peru" in comisiones.columns:
+            tabla_f = tabla[tabla["periodo"].astype(str).isin(seleccion)]
 
-    tabla_mensual = comisiones.copy()
+            # ================= RESUMEN MENSUAL =================
+            st.subheader("📊 Resumen mensual")
 
-    tabla_mensual["fecha"] = pd.to_datetime(
-        tabla_mensual["tx_create_date_gmt_peru"],
-        errors="coerce"
-    )
-
-    tabla_mensual["periodo"] = tabla_mensual["fecha"].dt.to_period("M")
-
-    meses_nombres = [
-        "Enero","Febrero","Marzo","Abril","Mayo","Junio",
-        "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
-    ]
-
-    tipo_cambio = st.number_input("Tipo de cambio PEN → USD", value=3.75, step=0.01)
-
-    for periodo, datos_mes in tabla_mensual.groupby("periodo"):
-
-        año, mes = str(periodo).split("-")
-        nombre_mes = meses_nombres[int(mes)-1]
-
-        recaudado_mes = datos_mes["tx_amount_pago"].sum()
-        neto_mes = datos_mes["total_neto"].sum()
-        diferencia_mes = datos_mes["diferencia"].sum()
-        operaciones_mes = len(datos_mes)
-        usd_mes = recaudado_mes / tipo_cambio
-
-        st.markdown(f"### 📅 {nombre_mes} {año}")
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-
-        c1.metric("💰 Recaudado", f"S/ {recaudado_mes:,.2f}")
-        c2.metric("💵 USD", f"US$ {usd_mes:,.2f}")
-        c3.metric("🔢 Operaciones", f"{operaciones_mes:,}")
-        c4.metric("🧮 Neto", f"S/ {neto_mes:,.2f}")
-        c5.metric("⚖️ Diferencia", f"S/ {diferencia_mes:,.2f}")
-
-        st.markdown("---")
-# ================= RESUMEN MENSUAL TOTAL =================
-st.divider()
-st.subheader("📊 Resumen financiero mensual")
-
-if "tx_create_date_gmt_peru" in comisiones.columns:
-
-    resumen_mensual = comisiones.copy()
-
-    resumen_mensual["fecha"] = pd.to_datetime(
-        resumen_mensual["tx_create_date_gmt_peru"],
-        errors="coerce"
-    )
-
-    resumen_mensual["periodo"] = resumen_mensual["fecha"].dt.to_period("M")
-
-    meses_nombres = [
-        "Enero","Febrero","Marzo","Abril","Mayo","Junio",
-        "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
-    ]
-
-    for periodo, datos_mes in resumen_mensual.groupby("periodo"):
-
-        año, mes = str(periodo).split("-")
-        nombre_mes = meses_nombres[int(mes)-1]
-
-        total_recaudo = datos_mes["tx_amount_pago"].sum()
-        total_comisiones = datos_mes["comision_real"].sum()
-        total_base = datos_mes["comision_base"].sum()
-        total_igv = datos_mes["igv"].sum()
-        total_final = datos_mes["comision_final"].sum()
-        total_neto = datos_mes["total_neto"].sum()
-        total_diferencia = datos_mes["diferencia"].sum()
-        operaciones = len(datos_mes)
-
-        st.markdown(f"### 📅 {nombre_mes} {año}")
-
-        c1, c2, c3 = st.columns(3)
-        c4, c5, c6 = st.columns(3)
-        c7, _, _ = st.columns(3)
-
-        c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-        c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-        c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-
-        c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-        c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-        c6.metric("🔢 Operaciones", f"{operaciones:,}")
-
-        st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
-        c7.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
-
-        st.markdown("---")
+            for periodo, datos in tabla_f.groupby("periodo"):
+                st.markdown(f"### {periodo}")
+                st.metric("💰 Recaudado", f"S/ {datos['tx_amount_pago'].sum():,.2f}")
+                st.metric("💸 Comisiones", f"S/ {datos['comision_real'].sum():,.2f}")
+                st.metric("🧮 Neto", f"S/ {datos['total_neto'].sum():,.2f}")
