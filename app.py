@@ -67,11 +67,16 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= FILTRO POR MES CON BOTÓN 🔥 =================
+    # ================= SESSION STATE 🔥 =================
+    if "filtro_aplicado" not in st.session_state:
+        st.session_state.filtro_aplicado = False
+
+    if "mes_sel" not in st.session_state:
+        st.session_state.mes_sel = None
+
+    # ================= FILTRO POR MES 🔥 =================
     st.divider()
     st.subheader("📅 Filtro por mes")
-
-    filtro_aplicado = False
 
     if "x_create_date_gmt_peru" in df.columns:
 
@@ -80,19 +85,27 @@ if archivo is not None:
 
         meses = sorted(df["mes"].dropna().unique())
 
-        mes_sel = st.selectbox("Selecciona un mes", meses)
+        mes_sel = st.selectbox(
+            "Selecciona un mes",
+            meses,
+            index=meses.index(st.session_state.mes_sel) if st.session_state.mes_sel in meses else 0
+        )
+
+        st.session_state.mes_sel = mes_sel
 
         if st.button("Aplicar filtro"):
-            df = df[df["mes"] == mes_sel]
-            filtro_aplicado = True
+            st.session_state.filtro_aplicado = True
 
     else:
         st.warning("No se encontró columna de fecha")
 
-    # 🚨 SI NO APLICAS FILTRO, NO AVANZA
-    if not filtro_aplicado:
-        st.info("Selecciona un mes y haz clic en 'Aplicar filtro' para ver resultados")
+    # 🚨 CONTROL DE EJECUCIÓN
+    if not st.session_state.filtro_aplicado:
+        st.info("Selecciona un mes y haz clic en 'Aplicar filtro'")
         st.stop()
+
+    # 🔥 APLICAR FILTRO
+    df = df[df["mes"] == st.session_state.mes_sel]
 
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -121,7 +134,6 @@ if archivo is not None:
         c3.metric("PEN sin duplicados", len(pen))
         c4.metric("USD sin duplicados", len(usd))
 
-        # 🔥 DESCARGAS BASES
         st.divider()
         st.subheader("Descargar resultados")
 
@@ -183,7 +195,6 @@ if archivo is not None:
 
             st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
 
-            # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
             total_recaudo = tabla["tx_amount_pago"].sum()
