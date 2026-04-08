@@ -67,49 +67,32 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= FILTRO POR MES (MEJORADO 🔥) =================
+    # ================= FILTRO POR MES CON BOTÓN 🔥 =================
     st.divider()
-    st.subheader("📅 Filtro por fecha")
+    st.subheader("📅 Filtro por mes")
 
-    if "tx_create_date_gmt_peru" in df.columns:
+    filtro_aplicado = False
 
-        df["fecha"] = pd.to_datetime(df["tx_create_date_gmt_peru"], errors="coerce")
+    if "x_create_date_gmt_peru" in df.columns:
 
-        # Crear columna de mes bonito
+        df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
         df["mes"] = df["fecha"].dt.strftime("%Y-%m")
 
-        # Ordenar meses
         meses = sorted(df["mes"].dropna().unique())
 
-        col1, col2 = st.columns(2)
+        mes_sel = st.selectbox("Selecciona un mes", meses)
 
-        with col1:
-            meses_sel = st.multiselect(
-                "Selecciona mes(es)",
-                meses,
-                default=meses
-            )
+        if st.button("Aplicar filtro"):
+            df = df[df["mes"] == mes_sel]
+            filtro_aplicado = True
 
-        with col2:
-            usar_rango = st.checkbox("Usar rango de fechas")
+    else:
+        st.warning("No se encontró columna de fecha")
 
-        # 🔥 FILTRO
-        if usar_rango:
-            fecha_min = df["fecha"].min()
-            fecha_max = df["fecha"].max()
-
-            rango = st.date_input(
-                "Selecciona rango",
-                [fecha_min, fecha_max]
-            )
-
-            if len(rango) == 2:
-                df = df[(df["fecha"] >= pd.to_datetime(rango[0])) &
-                        (df["fecha"] <= pd.to_datetime(rango[1]))]
-
-        else:
-            if meses_sel:
-                df = df[df["mes"].isin(meses_sel)]
+    # 🚨 SI NO APLICAS FILTRO, NO AVANZA
+    if not filtro_aplicado:
+        st.info("Selecciona un mes y haz clic en 'Aplicar filtro' para ver resultados")
+        st.stop()
 
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -198,7 +181,6 @@ if archivo is not None:
 
             st.dataframe(tabla)
 
-            # 🔥 DESCARGA COMISIONES
             st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
 
             # ================= RESUMEN =================
@@ -211,7 +193,6 @@ if archivo is not None:
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
 
-            # 🔥 SOLO PY = OPERACIONES REALES
             operaciones = pagos["psp_tin"].nunique()
 
             c1, c2, c3 = st.columns(3)
