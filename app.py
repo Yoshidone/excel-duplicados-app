@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import zipfile
 
-st.set_page_config(page_title="Analizador Financiero", layout="wide")
+st.set_page_config(page_title="Analizador Financiero Payin", layout="wide")
 st.title("Analizador Financiero de Bases")
 
 archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
