@@ -173,14 +173,12 @@ if archivo is not None:
 
             comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
             comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-
-            # 🔥 CORRECCIÓN CLAVE
-            comisiones["igv"] = (comisiones["comision_base"] * 0.18).round(2)
+            comisiones["igv"] = comisiones["comision_base"] * 0.18
 
             if aplicar_igv:
-                comisiones["comision_final"] = (comisiones["comision_base"] + comisiones["igv"]).round(2)
+                comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
             else:
-                comisiones["comision_final"] = comisiones["comision_base"].round(2)
+                comisiones["comision_final"] = comisiones["comision_base"]
                 comisiones["igv"] = 0
 
             comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
@@ -204,7 +202,7 @@ if archivo is not None:
             total_igv = tabla["igv"].sum()
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
-            total_diferencia = tabla["diferencia"].sum()
+            total_diferencia = tabla["diferencia"].sum()  # 🔥 NUEVO
 
             operaciones = pagos["psp_tin"].nunique()
 
@@ -216,7 +214,7 @@ if archivo is not None:
             c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
             c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
             c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-            c6.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")
+            c6.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")  # 🔥 NUEVO
 
             st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
