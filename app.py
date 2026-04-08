@@ -67,17 +67,49 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= FILTRO POR MES (ANTES DEL MERGE 🔥) =================
+    # ================= FILTRO POR MES (MEJORADO 🔥) =================
+    st.divider()
+    st.subheader("📅 Filtro por fecha")
+
     if "tx_create_date_gmt_peru" in df.columns:
+
         df["fecha"] = pd.to_datetime(df["tx_create_date_gmt_peru"], errors="coerce")
-        df["periodo"] = df["fecha"].dt.to_period("M")
 
-        meses = sorted(df["periodo"].dropna().astype(str).unique())
+        # Crear columna de mes bonito
+        df["mes"] = df["fecha"].dt.strftime("%Y-%m")
 
-        meses_sel = st.multiselect("📅 Filtrar por mes", meses, default=meses)
+        # Ordenar meses
+        meses = sorted(df["mes"].dropna().unique())
 
-        if meses_sel:
-            df = df[df["periodo"].astype(str).isin(meses_sel)]
+        col1, col2 = st.columns(2)
+
+        with col1:
+            meses_sel = st.multiselect(
+                "Selecciona mes(es)",
+                meses,
+                default=meses
+            )
+
+        with col2:
+            usar_rango = st.checkbox("Usar rango de fechas")
+
+        # 🔥 FILTRO
+        if usar_rango:
+            fecha_min = df["fecha"].min()
+            fecha_max = df["fecha"].max()
+
+            rango = st.date_input(
+                "Selecciona rango",
+                [fecha_min, fecha_max]
+            )
+
+            if len(rango) == 2:
+                df = df[(df["fecha"] >= pd.to_datetime(rango[0])) &
+                        (df["fecha"] <= pd.to_datetime(rango[1]))]
+
+        else:
+            if meses_sel:
+                df = df[df["mes"].isin(meses_sel)]
 
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
