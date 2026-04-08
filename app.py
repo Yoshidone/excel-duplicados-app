@@ -67,14 +67,14 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= SESSION STATE 🔥 =================
+    # ================= SESSION STATE =================
     if "filtro_aplicado" not in st.session_state:
         st.session_state.filtro_aplicado = False
 
     if "mes_sel" not in st.session_state:
         st.session_state.mes_sel = None
 
-    # ================= FILTRO POR MES 🔥 =================
+    # ================= FILTRO =================
     st.divider()
     st.subheader("📅 Filtro por mes")
 
@@ -99,12 +99,10 @@ if archivo is not None:
     else:
         st.warning("No se encontró columna de fecha")
 
-    # 🚨 CONTROL DE EJECUCIÓN
     if not st.session_state.filtro_aplicado:
         st.info("Selecciona un mes y haz clic en 'Aplicar filtro'")
         st.stop()
 
-    # 🔥 APLICAR FILTRO
     df = df[df["mes"] == st.session_state.mes_sel]
 
     # ================= BASES =================
@@ -195,6 +193,7 @@ if archivo is not None:
 
             st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
 
+            # ================= RESUMEN =================
             st.subheader("Resumen financiero")
 
             total_recaudo = tabla["tx_amount_pago"].sum()
@@ -203,6 +202,7 @@ if archivo is not None:
             total_igv = tabla["igv"].sum()
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
+            total_diferencia = tabla["diferencia"].sum()  # 🔥 NUEVO
 
             operaciones = pagos["psp_tin"].nunique()
 
@@ -214,5 +214,7 @@ if archivo is not None:
             c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
             c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
             c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-            c6.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+            c6.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")  # 🔥 NUEVO
+
+            st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
