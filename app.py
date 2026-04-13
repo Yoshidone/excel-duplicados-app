@@ -78,32 +78,44 @@ if archivo is not None:
     st.divider()
     st.subheader("📅 Filtro por mes")
 
-    if "x_create_date_gmt_peru" in df.columns:
+    col1, col2 = st.columns(2)
 
-        df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-        df["mes"] = df["fecha"].dt.strftime("%Y-%m")
+    with col1:
+        if "x_create_date_gmt_peru" in df.columns:
 
-        meses = sorted(df["mes"].dropna().unique())
+            df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
+            df["mes"] = df["fecha"].dt.strftime("%Y-%m")
 
-        mes_sel = st.selectbox(
-            "Selecciona un mes",
-            meses,
-            index=meses.index(st.session_state.mes_sel) if st.session_state.mes_sel in meses else 0
-        )
+            meses = sorted(df["mes"].dropna().unique())
 
-        st.session_state.mes_sel = mes_sel
+            mes_sel = st.selectbox(
+                "Selecciona un mes",
+                meses,
+                index=meses.index(st.session_state.mes_sel) if st.session_state.mes_sel in meses else 0
+            )
 
-        if st.button("Aplicar filtro"):
-            st.session_state.filtro_aplicado = True
+            st.session_state.mes_sel = mes_sel
 
-    else:
-        st.warning("No se encontró columna de fecha")
+        else:
+            st.warning("No se encontró columna de fecha")
+
+    with col2:
+        moneda_sel = st.selectbox("Selecciona moneda", ["PEN", "USD"])
+
+    if st.button("Aplicar filtro"):
+        st.session_state.filtro_aplicado = True
 
     if not st.session_state.filtro_aplicado:
-        st.info("Selecciona un mes y haz clic en 'Aplicar filtro'")
+        st.info("Selecciona filtros y haz clic en 'Aplicar filtro'")
         st.stop()
 
-    df = df[df["mes"] == st.session_state.mes_sel]
+    # 🔥 FILTRO CLAVE
+    df = df[
+        (df["mes"] == st.session_state.mes_sel) &
+        (df["tx_currency_code"] == moneda_sel)
+    ]
+
+    simbolo = "S/" if moneda_sel == "PEN" else "$"
 
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
@@ -150,10 +162,10 @@ if archivo is not None:
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
-        st.subheader("Comparación de comisiones")
+        st.subheader(f"Comparación de comisiones ({moneda_sel})")
 
         porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-        fee_fijo = st.number_input("Fee fijo (S/)", value=0.90)
+        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
         aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
         if "tx_reference" in df.columns and "tx_amount" in df.columns:
@@ -202,19 +214,19 @@ if archivo is not None:
             total_igv = tabla["igv"].sum()
             total_final = tabla["comision_final"].sum()
             total_neto = tabla["total_neto"].sum()
-            total_diferencia = tabla["diferencia"].sum()  # 🔥 NUEVO
+            total_diferencia = tabla["diferencia"].sum()
 
             operaciones = pagos["psp_tin"].nunique()
 
             c1, c2, c3 = st.columns(3)
             c4, c5, c6 = st.columns(3)
 
-            c1.metric("💰 Total Recaudado", f"S/ {total_recaudo:,.2f}")
-            c2.metric("💸 Comisiones Reales", f"S/ {total_comisiones:,.2f}")
-            c3.metric("🧾 Comisión Base", f"S/ {total_base:,.2f}")
-            c4.metric("🏛 IGV Total", f"S/ {total_igv:,.2f}")
-            c5.metric("📑 Comisión Final", f"S/ {total_final:,.2f}")
-            c6.metric("⚖️ Diferencia Total", f"S/ {total_diferencia:,.2f}")  # 🔥 NUEVO
+            c1.metric("💰 Total Recaudado", f"{simbolo} {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"{simbolo} {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"{simbolo} {total_base:,.2f}")
+            c4.metric("🏛 IGV Total", f"{simbolo} {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"{simbolo} {total_final:,.2f}")
+            c6.metric("⚖️ Diferencia Total", f"{simbolo} {total_diferencia:,.2f}")
 
             st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
-            st.metric("🧮 Total Neto", f"S/ {total_neto:,.2f}")
+            st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
