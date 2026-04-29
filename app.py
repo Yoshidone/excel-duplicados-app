@@ -235,8 +235,6 @@ archivo_extra = st.file_uploader(
     "Sube archivo para generar reporte final",
     type=["xlsx", "csv"],
     key="extra"
-)
-
 # ================= CRUCE FINAL =================
 if archivo is not None and archivo_extra is not None and modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
