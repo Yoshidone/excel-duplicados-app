@@ -236,6 +236,7 @@ archivo_extra = st.file_uploader(
     type=["xlsx", "csv"],
     key="extra"
 )
+
 # ================= CRUCE FINAL =================
 if archivo is not None and archivo_extra is not None and modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
@@ -245,29 +246,25 @@ if archivo is not None and archivo_extra is not None and modo in ["📊 Análisi
     st.divider()
     st.subheader("📄 Archivo final listo")
 
-    # 🔧 LIMPIEZA CLAVE (MISMO FORMATO)
+    # 🔧 LIMPIEZA CLAVE
     df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip().str.upper()
     df["tx_reference"] = df["tx_reference"].astype(str).str.strip().str.upper()
 
-    # 🔥 CREAR TABLA CON TX_REFERENCE (CLAVE REAL)
+    # 🔥 TABLA PARA CRUCE (usar tx_reference)
     tabla_cruce = tabla.copy()
-    tabla_cruce["tx_reference"] = pagos["tx_reference"].values
+    tabla_cruce["tx_reference"] = pagos["tx_reference"].astype(str).str.strip().str.upper()
 
-    tabla_cruce["tx_reference"] = tabla_cruce["tx_reference"].astype(str).str.strip().str.upper()
-
-    # 🔥 FILTRAR ARCHIVO EXTRA POR MES
+    # 🔥 FILTRO POR MES (respeta tu selección)
     if "fecha de registro" in df_extra.columns:
         df_extra["fecha de registro"] = pd.to_datetime(df_extra["fecha de registro"], errors="coerce")
         df_extra["mes"] = df_extra["fecha de registro"].dt.strftime("%Y-%m")
         df_extra = df_extra[df_extra["mes"] == st.session_state.mes_sel]
 
-    # 🧠 FECHA DE TRANSFERENCIA
-    df_fecha = df[["tx_reference", "x_create_date_gmt_peru"]].copy()
-    df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+    # 🧠 FECHA DE TRANSFERENCIA (TU COLUMNA REAL)
+    df_fecha = df[["tx_reference", "fecha transferencia"]].copy()
+    df_fecha.rename(columns={"fecha transferencia": "FECHA DE TRANSFERENCIA"}, inplace=True)
 
-    df_fecha["tx_reference"] = df_fecha["tx_reference"].astype(str).str.strip().str.upper()
-
-    # 🔗 MERGE REAL (YA CORRECTO)
+    # 🔗 MERGE CORRECTO
     final = df_extra.merge(
         tabla_cruce[["tx_reference", "tx_amount_pago", "comision_real", "total_neto"]],
         left_on="referencia de pago",
@@ -275,7 +272,11 @@ if archivo is not None and archivo_extra is not None and modo in ["📊 Análisi
         how="left"
     )
 
-    final = final.merge(df_fecha, on="tx_reference", how="left")
+    final = final.merge(
+        df_fecha,
+        on="tx_reference",
+        how="left"
+    )
 
     # ================= FORMATO FINAL =================
     salida = pd.DataFrame({
@@ -289,7 +290,7 @@ if archivo is not None and archivo_extra is not None and modo in ["📊 Análisi
         "NETO": final["total_neto"],
         "MÉTODO DE PAGO": final["método de pago"],
         "OPERACIÓN": final["operación"],
-        "FECHA DE TRANSFERENCIA": final["fecha de transferencia"]
+        "FECHA DE TRANSFERENCIA": final["FECHA DE TRANSFERENCIA"]
     })
 
     salida = salida.fillna(0)
