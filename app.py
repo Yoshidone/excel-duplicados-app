@@ -7,7 +7,7 @@ st.title("Analizador Financiero Payin")
 
 # ================= UPLOADS =================
 archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
-archivo_extra = st.file_uploader("Sube archivo adicional (base clientes)", type=["xlsx", "csv"], key="extra")
+archivo_extra = st.file_uploader("Sube archivo adicional (hoja 1)", type=["xlsx", "csv"], key="extra")
 
 modo = st.radio(
     "Modo de uso",
@@ -54,24 +54,19 @@ def cargar_archivo(file):
     else:
         return pd.read_excel(file, engine="openpyxl")
 
+# ================= LIMPIEZA CLAVE =================
+def limpiar_id(x):
+    return str(x).strip().upper().replace(" ", "")
+
 # ================= PROCESAR =================
 if archivo is not None:
 
     df = cargar_archivo(archivo)
     df.columns = df.columns.str.lower().str.strip()
+    st.success("Archivo cargado correctamente")
 
-    if archivo_extra is not None:
-        df_extra = cargar_archivo(archivo_extra)
-        df_extra.columns = df_extra.columns.str.lower().str.strip()
-        st.success("Archivo adicional cargado correctamente")
-
-    st.success("Archivo principal cargado correctamente")
-
-    # Validación
-    columnas_necesarias = ["psp_tin", "tx_currency_code", "tx_amount"]
-    faltantes = [c for c in columnas_necesarias if c not in df.columns]
-    if faltantes:
-        st.error(f"Faltan columnas: {', '.join(faltantes)}")
+    if "psp_tin" not in df.columns or "tx_currency_code" not in df.columns:
+        st.error("Faltan columnas necesarias")
         st.stop()
 
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
@@ -96,6 +91,7 @@ if archivo is not None:
         if "x_create_date_gmt_peru" in df.columns:
             df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
             df["mes"] = df["fecha"].dt.strftime("%Y-%m")
+
             meses = sorted(df["mes"].dropna().unique())
 
             mes_sel = st.selectbox(
@@ -117,14 +113,11 @@ if archivo is not None:
     if not st.session_state.filtro_aplicado:
         st.stop()
 
-    # 🔥 FILTRO
-    if "mes" in df.columns:
-        df = df[
-            (df["mes"] == st.session_state.mes_sel) &
-            (df["tx_currency_code"] == moneda_sel)
-        ]
-    else:
-        df = df[df["tx_currency_code"] == moneda_sel]
+    # 🔥 FILTRO PRINCIPAL
+    df = df[
+        (df["mes"] == st.session_state.mes_sel) &
+        (df["tx_currency_code"] == moneda_sel)
+    ]
 
     simbolo = "S/" if moneda_sel == "PEN" else "$"
 
@@ -138,16 +131,16 @@ if archivo is not None:
         c1, c2, c3 = st.columns(3)
         c1.metric("Total registros", len(df))
         c2.metric("Columnas", len(df.columns))
-        c3.metric("Sin duplicados", len(df_sin_duplicados))
+        c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
         st.download_button("Descargar base", exportar_csv(df_sin_duplicados), "base.csv")
 
     # ================= COMISIONES =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
-        aplicar_igv = st.checkbox("Aplicar IGV", True)
+        porcentaje = st.number_input("Porcentaje (%)", value=2.30)
+        fee_fijo = st.number_input("Fee fijo", value=0.90)
+        aplicar_igv = st.checkbox("IGV", True)
 
         pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
         fees = df[df["tx_reference"].str.startswith("SF", na=False)]
@@ -173,42 +166,60 @@ if archivo is not None:
 
         tabla = comisiones.fillna(0)
 
+        st.subheader("📊 Comparación de comisiones")
         st.dataframe(tabla)
 
         # ================= CRUCE FINAL =================
         if archivo_extra is not None:
 
-            df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip()
-            tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip()
+            df_extra = pd.read_excel(archivo_extra, sheet_name=0)
+            df_extra.columns = df_extra.columns.str.lower().str.strip()
 
-            # traer fecha transferencia
+            # 🔥 LIMPIEZA CLAVE
+            df_extra["referencia de pago"] = df_extra["referencia de pago"].apply(limpiar_id)
+            tabla["psp_tin"] = tabla["psp_tin"].apply(limpiar_id)
+            df["psp_tin"] = df["psp_tin"].apply(limpiar_id)
+
+            # 🔥 FILTRO POR MES EN ARCHIVO EXTRA
+            if "fecha de registro" in df_extra.columns:
+                df_extra["fecha de registro"] = pd.to_datetime(df_extra["fecha de registro"], errors="coerce")
+                df_extra["mes"] = df_extra["fecha de registro"].dt.strftime("%Y-%m")
+                df_extra = df_extra[df_extra["mes"] == st.session_state.mes_sel]
+
+            # Fecha transferencia
             df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
             df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+            df_fecha["psp_tin"] = df_fecha["psp_tin"].apply(limpiar_id)
 
-            final = df_extra.merge(tabla, left_on="referencia de pago", right_on="psp_tin", how="left")
+            # Merge
+            final = df_extra.merge(
+                tabla[["psp_tin","tx_amount_pago","comision_real","total_neto"]],
+                left_on="referencia de pago",
+                right_on="psp_tin",
+                how="left"
+            )
+
             final = final.merge(df_fecha, on="psp_tin", how="left")
 
             salida = pd.DataFrame({
-                "fecha de registro": final["fecha de registro"],
-                "empresa": final["empresa"],
-                "referencia de pago": final["referencia de pago"],
-                "cliente": final["cliente"],
-                "descripción": final["descripción"],
-                "recaudo": final["tx_amount_pago"],
-                "comisión kashio": final["comision_real"],
-                "neto": final["total_neto"],
-                "método de pago": final["método de pago"],
-                "operación": final["operación"],
-                "fecha de transferencia": final["fecha de transferencia"]
-            })
-
-            salida = salida.fillna(0)
+                "FECHA DE REGISTRO": final["fecha de registro"],
+                "EMPRESA": final["empresa"],
+                "REFERENCIA DE PAGO": final["referencia de pago"],
+                "CLIENTE": final["cliente"],
+                "DESCRIPCIÓN": final["descripción"],
+                "RECAUDO": final["tx_amount_pago"],
+                "COMISIÓN KASHIO": final["comision_real"],
+                "NETO": final["total_neto"],
+                "MÉTODO DE PAGO": final["método de pago"],
+                "OPERACIÓN": final["operación"],
+                "FECHA DE TRANSFERENCIA": final["fecha de transferencia"]
+            }).fillna(0)
 
             st.subheader("📄 Archivo final")
             st.dataframe(salida)
 
             st.download_button(
-                "📥 Descargar reporte final",
+                "📥 Descargar archivo final",
                 exportar_csv(salida),
                 "reporte_final.csv"
             )
