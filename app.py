@@ -236,7 +236,6 @@ archivo_extra = st.file_uploader(
     type=["xlsx", "csv"],
     key="extra"
 )
-
 # ================= CRUCE FINAL =================
 if archivo is not None and archivo_extra is not None and modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
@@ -246,10 +245,15 @@ if archivo is not None and archivo_extra is not None and modo in ["📊 Análisi
     st.divider()
     st.subheader("📄 Archivo final listo")
 
-    # 🔧 LIMPIEZA CLAVE (CRÍTICO)
+    # 🔧 LIMPIEZA CLAVE (MISMO FORMATO)
     df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip().str.upper()
-    tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip().str.upper()
-    df["psp_tin"] = df["psp_tin"].astype(str).str.strip().str.upper()
+    df["tx_reference"] = df["tx_reference"].astype(str).str.strip().str.upper()
+
+    # 🔥 CREAR TABLA CON TX_REFERENCE (CLAVE REAL)
+    tabla_cruce = tabla.copy()
+    tabla_cruce["tx_reference"] = pagos["tx_reference"].values
+
+    tabla_cruce["tx_reference"] = tabla_cruce["tx_reference"].astype(str).str.strip().str.upper()
 
     # 🔥 FILTRAR ARCHIVO EXTRA POR MES
     if "fecha de registro" in df_extra.columns:
@@ -257,21 +261,21 @@ if archivo is not None and archivo_extra is not None and modo in ["📊 Análisi
         df_extra["mes"] = df_extra["fecha de registro"].dt.strftime("%Y-%m")
         df_extra = df_extra[df_extra["mes"] == st.session_state.mes_sel]
 
-    # 🧠 FECHA DE TRANSFERENCIA (desde archivo principal)
-    df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
+    # 🧠 FECHA DE TRANSFERENCIA
+    df_fecha = df[["tx_reference", "x_create_date_gmt_peru"]].copy()
     df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
 
-    df_fecha["psp_tin"] = df_fecha["psp_tin"].astype(str).str.strip().str.upper()
+    df_fecha["tx_reference"] = df_fecha["tx_reference"].astype(str).str.strip().str.upper()
 
-    # 🔗 MERGE
+    # 🔗 MERGE REAL (YA CORRECTO)
     final = df_extra.merge(
-        tabla[["psp_tin", "tx_amount_pago", "comision_real", "total_neto"]],
+        tabla_cruce[["tx_reference", "tx_amount_pago", "comision_real", "total_neto"]],
         left_on="referencia de pago",
-        right_on="psp_tin",
+        right_on="tx_reference",
         how="left"
     )
 
-    final = final.merge(df_fecha, on="psp_tin", how="left")
+    final = final.merge(df_fecha, on="tx_reference", how="left")
 
     # ================= FORMATO FINAL =================
     salida = pd.DataFrame({
