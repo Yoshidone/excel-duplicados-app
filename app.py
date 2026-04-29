@@ -54,17 +54,16 @@ def cargar_archivo(file):
     else:
         return pd.read_excel(file, engine="openpyxl")
 
+# ================= LIMPIEZA CLAVE =================
+def limpiar_id(x):
+    return str(x).strip().upper().replace(" ", "")
+
 # ================= PROCESAR =================
 if archivo is not None:
 
     df = cargar_archivo(archivo)
     df.columns = df.columns.str.lower().str.strip()
     st.success("Archivo cargado correctamente")
-
-    if archivo_extra is not None:
-        df_extra = pd.read_excel(archivo_extra, sheet_name=0)
-        df_extra.columns = df_extra.columns.str.lower().str.strip()
-        st.success("Archivo adicional cargado")
 
     if "psp_tin" not in df.columns or "tx_currency_code" not in df.columns:
         st.error("Faltan columnas necesarias")
@@ -90,7 +89,6 @@ if archivo is not None:
 
     with col1:
         if "x_create_date_gmt_peru" in df.columns:
-
             df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
             df["mes"] = df["fecha"].dt.strftime("%Y-%m")
 
@@ -103,7 +101,6 @@ if archivo is not None:
             )
 
             st.session_state.mes_sel = mes_sel
-
         else:
             st.warning("No se encontró columna de fecha")
 
@@ -136,15 +133,14 @@ if archivo is not None:
         c2.metric("Columnas", len(df.columns))
         c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
+        st.download_button("Descargar base", exportar_csv(df_sin_duplicados), "base.csv")
+
     # ================= COMISIONES =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
-        st.divider()
-        st.subheader(f"Comparación de comisiones ({moneda_sel})")
-
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
-        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
+        porcentaje = st.number_input("Porcentaje (%)", value=2.30)
+        fee_fijo = st.number_input("Fee fijo", value=0.90)
+        aplicar_igv = st.checkbox("IGV", True)
 
         pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
         fees = df[df["tx_reference"].str.startswith("SF", na=False)]
@@ -168,28 +164,41 @@ if archivo is not None:
         comisiones["diferencia"] = comisiones["comision_real"] - comisiones["comision_final"]
         comisiones["total_neto"] = comisiones["tx_amount_pago"] - comisiones["comision_real"]
 
-        tabla = comisiones[
-            ["psp_tin","tx_amount_pago","comision_real","total_neto"]
-        ].fillna(0)
+        tabla = comisiones.fillna(0)
 
+        st.subheader("📊 Comparación de comisiones")
         st.dataframe(tabla)
 
         # ================= CRUCE FINAL =================
         if archivo_extra is not None:
 
-            df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip()
-            tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip()
-            df["psp_tin"] = df["psp_tin"].astype(str).str.strip()
+            df_extra = pd.read_excel(archivo_extra, sheet_name=0)
+            df_extra.columns = df_extra.columns.str.lower().str.strip()
 
-            # 🔥 FILTRAR SOLO MES SELECCIONADO
-            referencias_validas = tabla["psp_tin"].unique()
-            df_extra = df_extra[df_extra["referencia de pago"].isin(referencias_validas)]
+            # 🔥 LIMPIEZA CLAVE
+            df_extra["referencia de pago"] = df_extra["referencia de pago"].apply(limpiar_id)
+            tabla["psp_tin"] = tabla["psp_tin"].apply(limpiar_id)
+            df["psp_tin"] = df["psp_tin"].apply(limpiar_id)
 
-            # fecha transferencia
+            # 🔥 FILTRO POR MES EN ARCHIVO EXTRA
+            if "fecha de registro" in df_extra.columns:
+                df_extra["fecha de registro"] = pd.to_datetime(df_extra["fecha de registro"], errors="coerce")
+                df_extra["mes"] = df_extra["fecha de registro"].dt.strftime("%Y-%m")
+                df_extra = df_extra[df_extra["mes"] == st.session_state.mes_sel]
+
+            # Fecha transferencia
             df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
             df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+            df_fecha["psp_tin"] = df_fecha["psp_tin"].apply(limpiar_id)
 
-            final = df_extra.merge(tabla, left_on="referencia de pago", right_on="psp_tin", how="left")
+            # Merge
+            final = df_extra.merge(
+                tabla[["psp_tin","tx_amount_pago","comision_real","total_neto"]],
+                left_on="referencia de pago",
+                right_on="psp_tin",
+                how="left"
+            )
+
             final = final.merge(df_fecha, on="psp_tin", how="left")
 
             salida = pd.DataFrame({
@@ -206,8 +215,7 @@ if archivo is not None:
                 "FECHA DE TRANSFERENCIA": final["fecha de transferencia"]
             }).fillna(0)
 
-            st.divider()
-            st.subheader("📄 Archivo final listo")
+            st.subheader("📄 Archivo final")
             st.dataframe(salida)
 
             st.download_button(
