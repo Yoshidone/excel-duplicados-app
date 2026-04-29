@@ -230,3 +230,70 @@ if archivo is not None:
 
             st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
+# ================= ARCHIVO EXTRA =================
+archivo_extra = st.file_uploader(
+    "Sube archivo para generar reporte final",
+    type=["xlsx", "csv"],
+    key="extra"
+)
+
+# ================= CRUCE FINAL =================
+if archivo is not None and archivo_extra is not None and modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
+
+    df_extra = pd.read_excel(archivo_extra, sheet_name=0)
+    df_extra.columns = df_extra.columns.str.lower().str.strip()
+
+    st.divider()
+    st.subheader("📄 Archivo final listo")
+
+    # 🔧 LIMPIEZA CLAVE (CRÍTICO)
+    df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip().str.upper()
+    tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip().str.upper()
+    df["psp_tin"] = df["psp_tin"].astype(str).str.strip().str.upper()
+
+    # 🔥 FILTRAR ARCHIVO EXTRA POR MES
+    if "fecha de registro" in df_extra.columns:
+        df_extra["fecha de registro"] = pd.to_datetime(df_extra["fecha de registro"], errors="coerce")
+        df_extra["mes"] = df_extra["fecha de registro"].dt.strftime("%Y-%m")
+        df_extra = df_extra[df_extra["mes"] == st.session_state.mes_sel]
+
+    # 🧠 FECHA DE TRANSFERENCIA (desde archivo principal)
+    df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
+    df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+
+    df_fecha["psp_tin"] = df_fecha["psp_tin"].astype(str).str.strip().str.upper()
+
+    # 🔗 MERGE
+    final = df_extra.merge(
+        tabla[["psp_tin", "tx_amount_pago", "comision_real", "total_neto"]],
+        left_on="referencia de pago",
+        right_on="psp_tin",
+        how="left"
+    )
+
+    final = final.merge(df_fecha, on="psp_tin", how="left")
+
+    # ================= FORMATO FINAL =================
+    salida = pd.DataFrame({
+        "FECHA DE REGISTRO": final["fecha de registro"],
+        "EMPRESA": final["empresa"],
+        "REFERENCIA DE PAGO": final["referencia de pago"],
+        "CLIENTE": final["cliente"],
+        "DESCRIPCIÓN": final["descripción"],
+        "RECAUDO": final["tx_amount_pago"],
+        "COMISIÓN KASHIO": final["comision_real"],
+        "NETO": final["total_neto"],
+        "MÉTODO DE PAGO": final["método de pago"],
+        "OPERACIÓN": final["operación"],
+        "FECHA DE TRANSFERENCIA": final["fecha de transferencia"]
+    })
+
+    salida = salida.fillna(0)
+
+    st.dataframe(salida)
+
+    st.download_button(
+        "📥 Descargar archivo final",
+        exportar_csv(salida),
+        "reporte_final.csv"
+    )
