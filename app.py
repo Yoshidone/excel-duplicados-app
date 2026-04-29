@@ -230,6 +230,7 @@ if archivo is not None:
 
             st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
             st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
+            
 # ================= ARCHIVO EXTRA =================
 archivo_extra = st.file_uploader(
     "Sube archivo para generar reporte final",
