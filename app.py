@@ -6,8 +6,8 @@ st.set_page_config(page_title="Analizador Financiero Payin", layout="wide")
 st.title("Analizador Financiero Payin")
 
 # ================= UPLOADS =================
-archivo = st.file_uploader("Sube tu archivo principal", type=["xlsx", "csv", "zip"])
-archivo_extra = st.file_uploader("Sube archivo adicional (base clientes)", type=["xlsx", "csv"], key="extra")
+archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
+archivo_extra = st.file_uploader("Sube archivo adicional (hoja 1)", type=["xlsx", "csv"], key="extra")
 
 modo = st.radio(
     "Modo de uso",
@@ -59,19 +59,10 @@ if archivo is not None:
 
     df = cargar_archivo(archivo)
     df.columns = df.columns.str.lower().str.strip()
-    st.success("Archivo principal cargado")
+    st.success("Archivo cargado correctamente")
 
-    # Archivo extra
-    if archivo_extra is not None:
-        df_extra = pd.read_excel(archivo_extra, sheet_name=0)
-        df_extra.columns = df_extra.columns.str.lower().str.strip()
-        st.success("Archivo adicional cargado")
-
-    # Validación
-    columnas_necesarias = ["psp_tin", "tx_currency_code", "tx_amount"]
-    faltantes = [c for c in columnas_necesarias if c not in df.columns]
-    if faltantes:
-        st.error(f"Faltan columnas: {', '.join(faltantes)}")
+    if "psp_tin" not in df.columns or "tx_currency_code" not in df.columns:
+        st.error("Faltan columnas necesarias")
         st.stop()
 
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
@@ -79,96 +70,211 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= FILTRO =================
-    if "x_create_date_gmt_peru" in df.columns:
-        df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-        df["mes"] = df["fecha"].dt.strftime("%Y-%m")
-        mes_sel = st.selectbox("Mes", sorted(df["mes"].dropna().unique()))
-    else:
-        mes_sel = None
+    # ================= SESSION STATE =================
+    if "filtro_aplicado" not in st.session_state:
+        st.session_state.filtro_aplicado = False
 
-    moneda_sel = st.selectbox("Moneda", ["PEN", "USD"])
+    if "mes_sel" not in st.session_state:
+        st.session_state.mes_sel = None
+
+    # ================= FILTRO =================
+    st.divider()
+    st.subheader("📅 Filtro por mes")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "x_create_date_gmt_peru" in df.columns:
+
+            df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
+            df["mes"] = df["fecha"].dt.strftime("%Y-%m")
+
+            meses = sorted(df["mes"].dropna().unique())
+
+            mes_sel = st.selectbox(
+                "Selecciona un mes",
+                meses,
+                index=meses.index(st.session_state.mes_sel) if st.session_state.mes_sel in meses else 0
+            )
+
+            st.session_state.mes_sel = mes_sel
+
+        else:
+            st.warning("No se encontró columna de fecha")
+
+    with col2:
+        moneda_sel = st.selectbox("Selecciona moneda", ["PEN", "USD"])
 
     if st.button("Aplicar filtro"):
+        st.session_state.filtro_aplicado = True
 
-        if mes_sel:
-            df = df[(df["mes"] == mes_sel) & (df["tx_currency_code"] == moneda_sel)]
-        else:
-            df = df[df["tx_currency_code"] == moneda_sel]
+    if not st.session_state.filtro_aplicado:
+        st.info("Selecciona filtros y haz clic en 'Aplicar filtro'")
+        st.stop()
 
-        simbolo = "S/" if moneda_sel == "PEN" else "$"
+    df = df[
+        (df["mes"] == st.session_state.mes_sel) &
+        (df["tx_currency_code"] == moneda_sel)
+    ]
 
-        # ================= COMISIONES =================
-        porcentaje = st.number_input("Porcentaje (%)", value=2.30)
-        fee_fijo = st.number_input("Fee fijo", value=0.90)
-        aplicar_igv = st.checkbox("IGV", True)
+    simbolo = "S/" if moneda_sel == "PEN" else "$"
 
-        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+    # ================= BASES =================
+    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
-        fees = fees.groupby("psp_tin", as_index=False)["tx_amount"].sum()
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
 
-        comisiones = pagos.merge(fees, on="psp_tin", how="left", suffixes=("_pago", "_comision"))
+    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
+    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
-        comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+    if modo in ["📂 Solo preparar y descargar bases", "🧩 Completo (descargas + análisis)"]:
 
-        comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-        comisiones["igv"] = comisiones["comision_base"] * 0.18
+        st.subheader("Dashboard financiero")
 
-        if aplicar_igv:
-            comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
-        else:
-            comisiones["comision_final"] = comisiones["comision_base"]
-            comisiones["igv"] = 0
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total registros", len(df))
+        c2.metric("Columnas", len(df.columns))
+        c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
-        comisiones["diferencia"] = comisiones["comision_real"] - comisiones["comision_final"]
-        comisiones["total_neto"] = comisiones["tx_amount_pago"] - comisiones["comision_real"]
+        st.divider()
+        st.subheader("Separación por moneda")
 
-        tabla = comisiones.fillna(0)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("PEN totales", len(pen_total))
+        c2.metric("USD totales", len(usd_total))
+        c3.metric("PEN sin duplicados", len(pen))
+        c4.metric("USD sin duplicados", len(usd))
 
-        st.subheader("📊 Comparación de comisiones")
-        st.dataframe(tabla)
+        st.divider()
+        st.subheader("Descargar resultados")
 
-        # ================= CRUCE FINAL =================
-        if archivo_extra is not None:
+        c1, c2, c3 = st.columns(3)
 
-            # Normalizar claves
-            df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip()
-            tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip()
-            df["psp_tin"] = df["psp_tin"].astype(str).str.strip()
+        with c1:
+            st.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
 
-            # Fecha transferencia
-            df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
-            df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
-            df_fecha["psp_tin"] = df_fecha["psp_tin"].astype(str)
+        with c2:
+            st.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
 
-            # Merge
-            final = df_extra.merge(tabla, left_on="referencia de pago", right_on="psp_tin", how="left")
-            final = final.merge(df_fecha, on="psp_tin", how="left")
+        with c3:
+            st.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
-            # ================= FORMATO FINAL =================
-            salida = pd.DataFrame({
-                "FECHA DE REGISTRO": pd.to_datetime(final["fecha de registro"], errors="coerce").dt.strftime("%d/%m/%Y"),
-                "EMPRESA": final["empresa"],
-                "REFERENCIA DE PAGO": final["referencia de pago"],
-                "CLIENTE": final["cliente"],
-                "DESCRIPCIÓN": final["descripción"],
-                "RECAUDO": pd.to_numeric(final["tx_amount_pago"], errors="coerce").round(2),
-                "COMISIÓN KASHIO": pd.to_numeric(final["comision_real"], errors="coerce").round(2),
-                "NETO": pd.to_numeric(final["total_neto"], errors="coerce").round(2),
-                "MÉTODO DE PAGO": final["método de pago"],
-                "OPERACIÓN": final["operación"],
-                "FECHA DE TRANSFERENCIA": pd.to_datetime(final["fecha de transferencia"], errors="coerce").dt.strftime("%d/%m/%Y")
-            })
+    # ================= COMISIONES =================
+    if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
-            salida = salida.fillna(0)
+        st.divider()
+        st.subheader(f"Comparación de comisiones ({moneda_sel})")
 
-            st.subheader("📄 Archivo final listo")
-            st.dataframe(salida)
+        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
+        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
+        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
-            st.download_button(
-                "📥 Descargar reporte final",
-                exportar_csv(salida),
-                "reporte_final.csv"
+        if "tx_reference" in df.columns and "tx_amount" in df.columns:
+
+            pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+            fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+
+            comisiones = pagos.merge(
+                fees[["psp_tin", "tx_amount"]],
+                on="psp_tin",
+                how="left",
+                suffixes=("_pago", "_comision")
             )
+
+            comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
+            comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
+
+            comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+            comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
+            comisiones["igv"] = comisiones["comision_base"] * 0.18
+
+            if aplicar_igv:
+                comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
+            else:
+                comisiones["comision_final"] = comisiones["comision_base"]
+                comisiones["igv"] = 0
+
+            comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
+            comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
+
+            tabla = comisiones[
+                ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+                 "comision_final","diferencia","total_neto"]
+            ].fillna(0)
+
+            st.dataframe(tabla)
+
+            st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
+
+            # ================= RESUMEN =================
+            st.subheader("Resumen financiero")
+
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+            total_diferencia = tabla["diferencia"].sum()
+
+            operaciones = pagos["psp_tin"].nunique()
+
+            c1, c2, c3 = st.columns(3)
+            c4, c5, c6 = st.columns(3)
+
+            c1.metric("💰 Total Recaudado", f"{simbolo} {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"{simbolo} {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"{simbolo} {total_base:,.2f}")
+            c4.metric("🏛 IGV Total", f"{simbolo} {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"{simbolo} {total_final:,.2f}")
+            c6.metric("⚖️ Diferencia Total", f"{simbolo} {total_diferencia:,.2f}")
+
+            st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+            st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
+
+            # ================= CRUCE FINAL =================
+            if archivo_extra is not None:
+
+                df_extra = pd.read_excel(archivo_extra, sheet_name=0)
+                df_extra.columns = df_extra.columns.str.lower().str.strip()
+
+                df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip()
+                tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip()
+                df["psp_tin"] = df["psp_tin"].astype(str).str.strip()
+
+                df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
+                df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+
+                final = df_extra.merge(
+                    tabla[["psp_tin","tx_amount_pago","comision_real","total_neto"]],
+                    left_on="referencia de pago",
+                    right_on="psp_tin",
+                    how="left"
+                )
+
+                final = final.merge(df_fecha, on="psp_tin", how="left")
+
+                salida = pd.DataFrame({
+                    "FECHA DE REGISTRO": final["fecha de registro"],
+                    "EMPRESA": final["empresa"],
+                    "REFERENCIA DE PAGO": final["referencia de pago"],
+                    "CLIENTE": final["cliente"],
+                    "DESCRIPCIÓN": final["descripción"],
+                    "RECAUDO": final["tx_amount_pago"],
+                    "COMISIÓN KASHIO": final["comision_real"],
+                    "NETO": final["total_neto"],
+                    "MÉTODO DE PAGO": final["método de pago"],
+                    "OPERACIÓN": final["operación"],
+                    "FECHA DE TRANSFERENCIA": final["fecha de transferencia"]
+                }).fillna(0)
+
+                st.divider()
+                st.subheader("📄 Archivo final listo")
+                st.dataframe(salida)
+
+                st.download_button(
+                    "📥 Descargar archivo final",
+                    exportar_csv(salida),
+                    "reporte_final.csv"
+                )
