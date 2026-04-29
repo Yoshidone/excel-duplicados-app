@@ -6,7 +6,7 @@ st.set_page_config(page_title="Analizador Financiero Payin", layout="wide")
 st.title("Analizador Financiero Payin")
 
 # ================= UPLOADS =================
-archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
+archivo = st.file_uploader("Sube tu archivo principal", type=["xlsx", "csv", "zip"])
 archivo_extra = st.file_uploader("Sube archivo adicional (base clientes)", type=["xlsx", "csv"], key="extra")
 
 modo = st.radio(
@@ -59,13 +59,13 @@ if archivo is not None:
 
     df = cargar_archivo(archivo)
     df.columns = df.columns.str.lower().str.strip()
+    st.success("Archivo principal cargado")
 
+    # Archivo extra
     if archivo_extra is not None:
-        df_extra = cargar_archivo(archivo_extra)
+        df_extra = pd.read_excel(archivo_extra, sheet_name=0)
         df_extra.columns = df_extra.columns.str.lower().str.strip()
-        st.success("Archivo adicional cargado correctamente")
-
-    st.success("Archivo principal cargado correctamente")
+        st.success("Archivo adicional cargado")
 
     # Validación
     columnas_necesarias = ["psp_tin", "tx_currency_code", "tx_amount"]
@@ -79,75 +79,29 @@ if archivo is not None:
     if "tx_reference" in df.columns:
         df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
 
-    # ================= SESSION =================
-    if "filtro_aplicado" not in st.session_state:
-        st.session_state.filtro_aplicado = False
-
-    if "mes_sel" not in st.session_state:
-        st.session_state.mes_sel = None
-
     # ================= FILTRO =================
-    st.divider()
-    st.subheader("📅 Filtro por mes")
+    if "x_create_date_gmt_peru" in df.columns:
+        df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
+        df["mes"] = df["fecha"].dt.strftime("%Y-%m")
+        mes_sel = st.selectbox("Mes", sorted(df["mes"].dropna().unique()))
+    else:
+        mes_sel = None
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if "x_create_date_gmt_peru" in df.columns:
-            df["fecha"] = pd.to_datetime(df["x_create_date_gmt_peru"], errors="coerce")
-            df["mes"] = df["fecha"].dt.strftime("%Y-%m")
-            meses = sorted(df["mes"].dropna().unique())
-
-            mes_sel = st.selectbox(
-                "Selecciona un mes",
-                meses,
-                index=meses.index(st.session_state.mes_sel) if st.session_state.mes_sel in meses else 0
-            )
-
-            st.session_state.mes_sel = mes_sel
-        else:
-            st.warning("No se encontró columna de fecha")
-
-    with col2:
-        moneda_sel = st.selectbox("Selecciona moneda", ["PEN", "USD"])
+    moneda_sel = st.selectbox("Moneda", ["PEN", "USD"])
 
     if st.button("Aplicar filtro"):
-        st.session_state.filtro_aplicado = True
 
-    if not st.session_state.filtro_aplicado:
-        st.stop()
+        if mes_sel:
+            df = df[(df["mes"] == mes_sel) & (df["tx_currency_code"] == moneda_sel)]
+        else:
+            df = df[df["tx_currency_code"] == moneda_sel]
 
-    # 🔥 FILTRO
-    if "mes" in df.columns:
-        df = df[
-            (df["mes"] == st.session_state.mes_sel) &
-            (df["tx_currency_code"] == moneda_sel)
-        ]
-    else:
-        df = df[df["tx_currency_code"] == moneda_sel]
+        simbolo = "S/" if moneda_sel == "PEN" else "$"
 
-    simbolo = "S/" if moneda_sel == "PEN" else "$"
-
-    # ================= BASES =================
-    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
-
-    if modo in ["📂 Solo preparar y descargar bases", "🧩 Completo (descargas + análisis)"]:
-
-        st.subheader("Dashboard financiero")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total registros", len(df))
-        c2.metric("Columnas", len(df.columns))
-        c3.metric("Sin duplicados", len(df_sin_duplicados))
-
-        st.download_button("Descargar base", exportar_csv(df_sin_duplicados), "base.csv")
-
-    # ================= COMISIONES =================
-    if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
-
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
-        aplicar_igv = st.checkbox("Aplicar IGV", True)
+        # ================= COMISIONES =================
+        porcentaje = st.number_input("Porcentaje (%)", value=2.30)
+        fee_fijo = st.number_input("Fee fijo", value=0.90)
+        aplicar_igv = st.checkbox("IGV", True)
 
         pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
         fees = df[df["tx_reference"].str.startswith("SF", na=False)]
@@ -173,38 +127,44 @@ if archivo is not None:
 
         tabla = comisiones.fillna(0)
 
+        st.subheader("📊 Comparación de comisiones")
         st.dataframe(tabla)
 
         # ================= CRUCE FINAL =================
         if archivo_extra is not None:
 
+            # Normalizar claves
             df_extra["referencia de pago"] = df_extra["referencia de pago"].astype(str).str.strip()
             tabla["psp_tin"] = tabla["psp_tin"].astype(str).str.strip()
+            df["psp_tin"] = df["psp_tin"].astype(str).str.strip()
 
-            # traer fecha transferencia
+            # Fecha transferencia
             df_fecha = df[["psp_tin", "x_create_date_gmt_peru"]].copy()
             df_fecha.rename(columns={"x_create_date_gmt_peru": "fecha de transferencia"}, inplace=True)
+            df_fecha["psp_tin"] = df_fecha["psp_tin"].astype(str)
 
+            # Merge
             final = df_extra.merge(tabla, left_on="referencia de pago", right_on="psp_tin", how="left")
             final = final.merge(df_fecha, on="psp_tin", how="left")
 
+            # ================= FORMATO FINAL =================
             salida = pd.DataFrame({
-                "fecha de registro": final["fecha de registro"],
-                "empresa": final["empresa"],
-                "referencia de pago": final["referencia de pago"],
-                "cliente": final["cliente"],
-                "descripción": final["descripción"],
-                "recaudo": final["tx_amount_pago"],
-                "comisión kashio": final["comision_real"],
-                "neto": final["total_neto"],
-                "método de pago": final["método de pago"],
-                "operación": final["operación"],
-                "fecha de transferencia": final["fecha de transferencia"]
+                "FECHA DE REGISTRO": pd.to_datetime(final["fecha de registro"], errors="coerce").dt.strftime("%d/%m/%Y"),
+                "EMPRESA": final["empresa"],
+                "REFERENCIA DE PAGO": final["referencia de pago"],
+                "CLIENTE": final["cliente"],
+                "DESCRIPCIÓN": final["descripción"],
+                "RECAUDO": pd.to_numeric(final["tx_amount_pago"], errors="coerce").round(2),
+                "COMISIÓN KASHIO": pd.to_numeric(final["comision_real"], errors="coerce").round(2),
+                "NETO": pd.to_numeric(final["total_neto"], errors="coerce").round(2),
+                "MÉTODO DE PAGO": final["método de pago"],
+                "OPERACIÓN": final["operación"],
+                "FECHA DE TRANSFERENCIA": pd.to_datetime(final["fecha de transferencia"], errors="coerce").dt.strftime("%d/%m/%Y")
             })
 
             salida = salida.fillna(0)
 
-            st.subheader("📄 Archivo final")
+            st.subheader("📄 Archivo final listo")
             st.dataframe(salida)
 
             st.download_button(
