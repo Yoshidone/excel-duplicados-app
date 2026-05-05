@@ -96,6 +96,9 @@ if archivo is not None:
     # ================= BASES =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
+    pen_total = df[df["tx_currency_code"] == "PEN"]
+    usd_total = df[df["tx_currency_code"] == "USD"]
+
     pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
     usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
 
@@ -109,48 +112,72 @@ if archivo is not None:
         c3.metric("Registros sin duplicados", len(df_sin_duplicados))
 
         st.divider()
+        st.subheader("Separación por moneda")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("PEN totales", len(pen_total))
+        c2.metric("USD totales", len(usd_total))
+        c3.metric("PEN sin duplicados", len(pen))
+        c4.metric("USD sin duplicados", len(usd))
+
+        st.divider()
         st.subheader("Descargar resultados")
 
-        st.download_button("Base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
-        st.download_button("PEN", exportar_csv(pen), "pen.csv")
-        st.download_button("USD", exportar_csv(usd), "usd.csv")
+        c1, c2, c3 = st.columns(3)
+        c1.download_button("Descargar base sin duplicados", exportar_csv(df_sin_duplicados), "base.csv")
+        c2.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
+        c3.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
-    # ================= COMISIONES =================
+    # ================= COMISIONES (TU LÓGICA ORIGINAL) =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
         st.subheader(f"Comparación de comisiones ({moneda_sel})")
 
-        porcentaje = st.number_input("Porcentaje (%)", value=2.30)
-        fee_fijo = st.number_input("Fee fijo", value=0.90)
-        aplicar_igv = st.checkbox("Aplicar IGV", True)
+        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
+        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
+        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
-        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+        if "tx_reference" in df.columns and "tx_amount" in df.columns:
 
-        comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
-            how="left",
-            suffixes=("_pago", "_comision")
-        )
+            pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+            fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
-        comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
+            comisiones = pagos.merge(
+                fees[["psp_tin", "tx_amount"]],
+                on="psp_tin",
+                how="left",
+                suffixes=("_pago", "_comision")
+            )
 
-        comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
-        comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
-        comisiones["igv"] = comisiones["comision_base"] * 0.18
+            comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
+            comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
-        comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"] if aplicar_igv else comisiones["comision_base"]
-        comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
-        comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
+            comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+            comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
+            comisiones["igv"] = comisiones["comision_base"] * 0.18
 
-        st.dataframe(comisiones)
+            if aplicar_igv:
+                comisiones["comision_final"] = comisiones["comision_base"] + comisiones["igv"]
+            else:
+                comisiones["comision_final"] = comisiones["comision_base"]
+                comisiones["igv"] = 0
 
-    # ================= REPORTE KRECE (MES) =================
+            comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
+            comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
+
+            tabla = comisiones[
+                ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+                 "comision_final","diferencia","total_neto"]
+            ].fillna(0)
+
+            st.dataframe(tabla)
+
+            st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
+
+    # ================= REPORTE DETALLADO =================
     st.divider()
-    st.subheader("📄 Reporte KRECE (mes seleccionado)")
+    st.subheader("📄 Reporte detallado (mes seleccionado)")
 
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
     fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
@@ -182,13 +209,13 @@ if archivo is not None:
     st.dataframe(salida)
 
     st.download_button(
-        "📥 Descargar reporte KRECE (mes)",
+        "📥 Descargar reporte detallado (mes)",
         exportar_csv(salida),
-        "reporte_krece_mes.csv"
+        "reporte_detallado_mes.csv"
     )
 
-    # ================= REPORTE TODOS LOS MESES =================
-    st.subheader("📦 Reporte KRECE (todos los meses)")
+    # ================= TODOS LOS MESES =================
+    st.subheader("📦 Reporte detallado (todos los meses)")
 
     df_full = df_original.copy()
 
@@ -204,7 +231,7 @@ if archivo is not None:
         how="left"
     )
 
-    reporte_full = pd.DataFrame({
+    reporte_full = salida = pd.DataFrame({
         "Com_Nombre": detalle_full.get("com_nombre", ""),
         "Deb_Nombre": detalle_full.get("deb_nombre", ""),
         "psp_tin": detalle_full["psp_tin"],
@@ -220,7 +247,7 @@ if archivo is not None:
     }).fillna(0)
 
     st.download_button(
-        "📥 Descargar reporte KRECE (todos)",
+        "📥 Descargar reporte detallado (todos)",
         exportar_csv(reporte_full),
-        "reporte_krece_todos.csv"
+        "reporte_detallado_todos.csv"
     )
