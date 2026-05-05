@@ -128,7 +128,7 @@ if archivo is not None:
         c2.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
         c3.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
-    # ================= COMISIONES (TU LÓGICA ORIGINAL) =================
+    # ================= COMISIONES =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
@@ -182,7 +182,7 @@ if archivo is not None:
     pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
     fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
 
-    pagos.rename(columns={"tx_amount": "TOTAL", "tx_reference": "PY_operation_no"}, inplace=True)
+    pagos.rename(columns={"tx_amount": "RECAUDO", "tx_reference": "PY_operation_no"}, inplace=True)
     fees.rename(columns={"tx_amount": "COMISION", "tx_reference": "SF_operation_no"}, inplace=True)
 
     detalle = pagos.merge(
@@ -191,26 +191,26 @@ if archivo is not None:
         how="left"
     )
 
-    salida = pd.DataFrame({
-        "Com_Nombre": detalle.get("com_nombre", ""),
-        "Deb_Nombre": detalle.get("deb_nombre", ""),
+    reporte = pd.DataFrame({
+        "FECHA": detalle.get("x_create_date_gmt_peru", ""),
+        "COMERCIO": detalle.get("com_nombre", ""),
+        "MONEDA": detalle.get("tx_currency_code", ""),
+        "CLIENTE": detalle.get("deb_nombre", ""),
         "psp_tin": detalle["psp_tin"],
         "tipo": detalle.get("tipo", ""),
-        "X_create_date_GMT_Peru": detalle.get("x_create_date_gmt_peru", ""),
         "PY_operation_no": detalle["PY_operation_no"],
         "SF_operation_no": detalle["SF_operation_no"],
-        "TX_currency_code": detalle.get("tx_currency_code", ""),
-        "TOTAL": detalle["TOTAL"],
+        "RECAUDO": detalle["RECAUDO"],
         "COMISION": detalle["COMISION"].abs(),
         "SET_referencia": detalle.get("set_referencia", ""),
         "Fecha Transferencia": detalle.get("x_create_date_gmt_peru", "")
     }).fillna(0)
 
-    st.dataframe(salida)
+    st.dataframe(reporte)
 
     st.download_button(
         "📥 Descargar reporte detallado (mes)",
-        exportar_csv(salida),
+        exportar_csv(reporte),
         "reporte_detallado_mes.csv"
     )
 
@@ -222,7 +222,7 @@ if archivo is not None:
     pagos_full = df_full[df_full["tx_reference"].str.startswith("PY", na=False)].copy()
     fees_full = df_full[df_full["tx_reference"].str.startswith("SF", na=False)].copy()
 
-    pagos_full.rename(columns={"tx_amount": "TOTAL", "tx_reference": "PY_operation_no"}, inplace=True)
+    pagos_full.rename(columns={"tx_amount": "RECAUDO", "tx_reference": "PY_operation_no"}, inplace=True)
     fees_full.rename(columns={"tx_amount": "COMISION", "tx_reference": "SF_operation_no"}, inplace=True)
 
     detalle_full = pagos_full.merge(
@@ -231,16 +231,16 @@ if archivo is not None:
         how="left"
     )
 
-    reporte_full = salida = pd.DataFrame({
-        "Com_Nombre": detalle_full.get("com_nombre", ""),
-        "Deb_Nombre": detalle_full.get("deb_nombre", ""),
+    reporte_full = pd.DataFrame({
+        "FECHA": detalle_full.get("x_create_date_gmt_peru", ""),
+        "COMERCIO": detalle_full.get("com_nombre", ""),
+        "MONEDA": detalle_full.get("tx_currency_code", ""),
+        "CLIENTE": detalle_full.get("deb_nombre", ""),
         "psp_tin": detalle_full["psp_tin"],
         "tipo": detalle_full.get("tipo", ""),
-        "X_create_date_GMT_Peru": detalle_full.get("x_create_date_gmt_peru", ""),
         "PY_operation_no": detalle_full["PY_operation_no"],
         "SF_operation_no": detalle_full["SF_operation_no"],
-        "TX_currency_code": detalle_full.get("tx_currency_code", ""),
-        "TOTAL": detalle_full["TOTAL"],
+        "RECAUDO": detalle_full["RECAUDO"],
         "COMISION": detalle_full["COMISION"].abs(),
         "SET_referencia": detalle_full.get("set_referencia", ""),
         "Fecha Transferencia": detalle_full.get("x_create_date_gmt_peru", "")
