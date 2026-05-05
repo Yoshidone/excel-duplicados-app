@@ -143,7 +143,6 @@ if archivo is not None:
         comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
         comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
 
-        # Mostrar detalle (por fila)
         comisiones["igv"] = (comisiones["comision_base"] * 0.18).round(3)
         comisiones["comision_final"] = (comisiones["comision_base"] + comisiones["igv"]).round(3)
 
@@ -159,13 +158,12 @@ if archivo is not None:
 
         st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
 
-        # ================= RESUMEN FINANCIERO (CUADRE CONTABLE) =================
+        # ================= RESUMEN =================
         st.subheader("Resumen financiero")
 
         total_recaudo = tabla["tx_amount_pago"].sum()
         total_base = tabla["comision_base"].sum()
 
-        # 🔥 CLAVE: redondeo final como Excel
         total_igv = round(total_base * 0.18, 2)
         total_final = round(total_base + total_igv, 2)
 
@@ -217,7 +215,7 @@ if archivo is not None:
         "RECAUDO": detalle["RECAUDO"],
         "COMISION": detalle["COMISION"].abs(),
         "SET_referencia": detalle.get("set_referencia", ""),
-        "Fecha Transferencia": detalle.get("x_create_date_gmt_peru", "")
+        "Fecha Transferencia": detalle.get("fecha transferencia", "")
     }).fillna(0)
 
     st.dataframe(reporte)
@@ -257,7 +255,7 @@ if archivo is not None:
         "RECAUDO": detalle_full["RECAUDO"],
         "COMISION": detalle_full["COMISION"].abs(),
         "SET_referencia": detalle_full.get("set_referencia", ""),
-        "Fecha Transferencia": detalle_full.get("x_create_date_gmt_peru", "")
+        "Fecha Transferencia": detalle_full.get("fecha transferencia", "")
     }).fillna(0)
 
     st.download_button(
