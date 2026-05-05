@@ -7,14 +7,7 @@ st.title("Analizador Financiero Payin")
 
 archivo = st.file_uploader("Sube tu archivo Excel, CSV o ZIP", type=["xlsx", "csv", "zip"])
 
-modo = st.radio(
-    "Modo de uso",
-    [
-        "📂 Solo preparar y descargar bases",
-        "📊 Análisis completo de comisiones",
-        "🧩 Completo (descargas + análisis)"
-    ]
-)
+modo = st.radio("Modo de uso", ["📊 Análisis completo de comisiones"])
 
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
@@ -83,116 +76,78 @@ if archivo is not None:
 
     moneda_sel = col2.selectbox("Selecciona moneda", ["PEN", "USD"])
 
-    df = df[
-        (df["mes"] == mes_sel) &
-        (df["tx_currency_code"] == moneda_sel)
-    ]
+    df = df[(df["mes"] == mes_sel) & (df["tx_currency_code"] == moneda_sel)]
 
     simbolo = "S/" if moneda_sel == "PEN" else "$"
 
-    # ================= DASHBOARD =================
-    df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
-
-    pen_total = df[df["tx_currency_code"] == "PEN"]
-    usd_total = df[df["tx_currency_code"] == "USD"]
-
-    pen = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "PEN"]
-    usd = df_sin_duplicados[df_sin_duplicados["tx_currency_code"] == "USD"]
-
-    if modo in ["📂 Solo preparar y descargar bases", "🧩 Completo (descargas + análisis)"]:
-
-        st.subheader("Dashboard financiero")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total registros", len(df))
-        c2.metric("Columnas", len(df.columns))
-        c3.metric("Registros sin duplicados", len(df_sin_duplicados))
-
-        st.divider()
-        st.subheader("Separación por moneda")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("PEN totales", len(pen_total))
-        c2.metric("USD totales", len(usd_total))
-        c3.metric("PEN sin duplicados", len(pen))
-        c4.metric("USD sin duplicados", len(usd))
-
     # ================= COMISIONES =================
-    if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
+    st.divider()
+    st.subheader(f"Comparación de comisiones ({moneda_sel})")
 
-        st.divider()
-        st.subheader(f"Comparación de comisiones ({moneda_sel})")
+    porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
+    fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
+    aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
 
-        porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-        fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
-        aplicar_igv = st.checkbox("Aplicar IGV (18%)", True)
+    pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
+    fees = df[df["tx_reference"].str.startswith("SF", na=False)]
 
-        pagos = df[df["tx_reference"].str.startswith("PY", na=False)]
-        fees = df[df["tx_reference"].str.startswith("SF", na=False)]
+    comisiones = pagos.merge(
+        fees[["psp_tin", "tx_amount"]],
+        on="psp_tin",
+        how="left",
+        suffixes=("_pago", "_comision")
+    )
 
-        comisiones = pagos.merge(
-            fees[["psp_tin", "tx_amount"]],
-            on="psp_tin",
-            how="left",
-            suffixes=("_pago", "_comision")
-        )
+    comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
+    comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
 
-        comisiones["tx_amount_pago"] = pd.to_numeric(comisiones["tx_amount_pago"], errors="coerce")
-        comisiones["tx_amount_comision"] = pd.to_numeric(comisiones["tx_amount_comision"], errors="coerce")
+    comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+    comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
 
-        comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
-        comisiones["comision_base"] = (comisiones["tx_amount_pago"] * (porcentaje / 100)) + fee_fijo
+    comisiones["igv"] = (comisiones["comision_base"] * 0.18).round(3)
 
-        comisiones["igv"] = (comisiones["comision_base"] * 0.18).round(3)
-        comisiones["comision_final"] = (comisiones["comision_base"] + comisiones["igv"]).round(3)
+    # 🔥 CAMBIO: REDONDEO A 2 DECIMALES
+    comisiones["comision_final"] = (comisiones["comision_base"] + comisiones["igv"]).round(2)
 
-        comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
-        comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
+    comisiones["diferencia"] = (comisiones["comision_real"] - comisiones["comision_final"]).round(2)
+    comisiones["total_neto"] = (comisiones["tx_amount_pago"] - comisiones["comision_real"]).round(2)
 
-        tabla = comisiones[
-            ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
-             "comision_final","diferencia","total_neto"]
-        ].fillna(0)
+    tabla = comisiones[
+        ["psp_tin","tx_amount_pago","comision_real","comision_base","igv",
+         "comision_final","diferencia","total_neto"]
+    ].fillna(0)
 
-        st.dataframe(tabla)
+    st.dataframe(tabla)
 
-        st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
+    st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
 
-        # ================= RESUMEN =================
-        st.subheader("Resumen financiero")
+    # ================= RESUMEN =================
+    st.subheader("Resumen financiero")
 
-        total_recaudo = tabla["tx_amount_pago"].sum()
-        total_base = tabla["comision_base"].sum()
+    total_recaudo = tabla["tx_amount_pago"].sum()
+    total_base = tabla["comision_base"].sum()
 
-        total_igv = round(total_base * 0.18, 2)
-        total_final = round(total_base + total_igv, 2)
+    total_igv = round(total_base * 0.18, 2)
+    total_final = round(total_base + total_igv, 2)
 
-        total_comisiones = round(tabla["comision_real"].sum(), 2)
-        total_neto = round(tabla["total_neto"].sum(), 2)
-        total_diferencia = round(total_comisiones - total_final, 2)
+    total_comisiones = round(tabla["comision_real"].sum(), 2)
+    total_neto = round(tabla["total_neto"].sum(), 2)
+    total_diferencia = round(total_comisiones - total_final, 2)
 
-        operaciones = tabla["psp_tin"].nunique()
+    operaciones = tabla["psp_tin"].nunique()
 
-        c1, c2, c3 = st.columns(3)
-        c4, c5, c6 = st.columns(3)
-
-        c1.metric("💰 Total Recaudado", f"{simbolo} {total_recaudo:,.2f}")
-        c2.metric("💸 Comisiones Reales", f"{simbolo} {total_comisiones:,.2f}")
-        c3.metric("🧾 Comisión Base", f"{simbolo} {total_base:,.2f}")
-
-        c4.metric("🏛 IGV Total", f"{simbolo} {total_igv:,.2f}")
-        c5.metric("📑 Comisión Final", f"{simbolo} {total_final:,.2f}")
-        c6.metric("⚖️ Diferencia Total", f"{simbolo} {total_diferencia:,.2f}")
-
-        st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
-        st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
+    st.metric("💰 Total Recaudado", f"{simbolo} {total_recaudo:,.2f}")
+    st.metric("💸 Comisiones Reales", f"{simbolo} {total_comisiones:,.2f}")
+    st.metric("🧾 Comisión Base", f"{simbolo} {total_base:,.2f}")
+    st.metric("🏛 IGV Total", f"{simbolo} {total_igv:,.2f}")
+    st.metric("📑 Comisión Final", f"{simbolo} {total_final:,.2f}")
+    st.metric("⚖️ Diferencia Total", f"{simbolo} {total_diferencia:,.2f}")
+    st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+    st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
 
     # ================= REPORTE DETALLADO =================
     st.divider()
     st.subheader("📄 Reporte detallado (mes seleccionado)")
-
-    pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
-    fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
 
     pagos.rename(columns={"tx_amount": "RECAUDO", "tx_reference": "PY_operation_no"}, inplace=True)
     fees.rename(columns={"tx_amount": "COMISION", "tx_reference": "SF_operation_no"}, inplace=True)
