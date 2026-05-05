@@ -93,7 +93,7 @@ if archivo is not None:
 
     simbolo = "S/" if moneda_sel == "PEN" else "$"
 
-    # ================= BASES =================
+    # ================= BASES (DASHBOARD ORIGINAL) =================
     df_sin_duplicados = df.drop_duplicates(subset="psp_tin")
 
     pen_total = df[df["tx_currency_code"] == "PEN"]
@@ -128,7 +128,7 @@ if archivo is not None:
         c2.download_button("Descargar PEN", exportar_csv(pen), "pen.csv")
         c3.download_button("Descargar USD", exportar_csv(usd), "usd.csv")
 
-    # ================= COMISIONES =================
+    # ================= COMPARACIÓN DE COMISIONES =================
     if modo in ["📊 Análisis completo de comisiones", "🧩 Completo (descargas + análisis)"]:
 
         st.divider()
@@ -174,6 +174,33 @@ if archivo is not None:
             st.dataframe(tabla)
 
             st.download_button("📥 Descargar comparación de comisiones", exportar_csv(tabla), "comisiones.csv")
+
+            # ================= RESUMEN FINANCIERO (LO QUE TE FALTABA) =================
+            st.subheader("Resumen financiero")
+
+            total_recaudo = tabla["tx_amount_pago"].sum()
+            total_comisiones = tabla["comision_real"].sum()
+            total_base = tabla["comision_base"].sum()
+            total_igv = tabla["igv"].sum()
+            total_final = tabla["comision_final"].sum()
+            total_neto = tabla["total_neto"].sum()
+            total_diferencia = tabla["diferencia"].sum()
+
+            operaciones = tabla["psp_tin"].nunique()
+
+            c1, c2, c3 = st.columns(3)
+            c4, c5, c6 = st.columns(3)
+
+            c1.metric("💰 Total Recaudado", f"{simbolo} {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones Reales", f"{simbolo} {total_comisiones:,.2f}")
+            c3.metric("🧾 Comisión Base", f"{simbolo} {total_base:,.2f}")
+
+            c4.metric("🏛 IGV Total", f"{simbolo} {total_igv:,.2f}")
+            c5.metric("📑 Comisión Final", f"{simbolo} {total_final:,.2f}")
+            c6.metric("⚖️ Diferencia Total", f"{simbolo} {total_diferencia:,.2f}")
+
+            st.metric("🔢 Número de Operaciones", f"{operaciones:,}")
+            st.metric("🧮 Total Neto", f"{simbolo} {total_neto:,.2f}")
 
     # ================= REPORTE DETALLADO =================
     st.divider()
