@@ -12,241 +12,24 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* ================= FONDO GENERAL ================= */
-.stApp{
-    background:
-    radial-gradient(circle at top left,#FFE7D6 0%,transparent 25%),
-    radial-gradient(circle at top right,#DDEBFF 0%,transparent 25%),
-    radial-gradient(circle at bottom left,#FFF4C7 0%,transparent 25%),
-    #F8FAFC;
-
-    color:#334155;
-}
-
-/* ================= CONTENEDOR ================= */
 .block-container{
     padding-top:2rem;
     padding-bottom:2rem;
-    padding-left:2rem;
-    padding-right:2rem;
 }
 
-/* ================= TITULOS ================= */
-h1,h2,h3{
-    color:#1E293B;
-    font-weight:700;
-    letter-spacing:-0.5px;
-}
-
-/* ================= TEXTO ================= */
-html, body, p, label, span{
-    color:#475569;
-    font-family:'Inter',sans-serif;
-}
-
-/* ================= METRICAS ================= */
 [data-testid="metric-container"]{
-
-    background:rgba(255,255,255,0.65);
-
-    backdrop-filter:blur(18px);
-
-    border:1px solid rgba(255,255,255,0.7);
-
-    border-radius:24px;
-
-    padding:22px;
-
-    box-shadow:
-    0 8px 30px rgba(0,0,0,0.06);
-
-    transition:0.3s;
+    background-color:#111827;
+    padding:15px;
+    border-radius:12px;
+    border:1px solid #374151;
 }
 
-/* HOVER METRICAS */
-[data-testid="metric-container"]:hover{
-
-    transform:translateY(-3px);
-
-    box-shadow:
-    0 12px 35px rgba(0,0,0,0.08);
-}
-
-/* LABEL METRICAS */
 [data-testid="metric-container"] label{
-
-    color:#64748B !important;
-
-    font-size:14px;
-
-    font-weight:500;
+    color:#9CA3AF;
 }
 
-/* VALORES */
 [data-testid="metric-container"] div{
-
-    color:#1E293B !important;
-
-    font-weight:700;
-}
-
-/* ================= TABLAS ================= */
-div[data-testid="stDataFrame"]{
-
-    background:rgba(255,255,255,0.70);
-
-    backdrop-filter:blur(18px);
-
-    border-radius:24px;
-
-    border:1px solid rgba(255,255,255,0.7);
-
-    overflow:hidden;
-
-    box-shadow:
-    0 8px 30px rgba(0,0,0,0.05);
-}
-
-/* TEXTO TABLAS */
-[data-testid="stDataFrame"] *{
-    color:#475569 !important;
-}
-
-/* ================= BOTONES ================= */
-.stButton>button,
-.stDownloadButton>button{
-
-    background:rgba(255,255,255,0.75);
-
-    color:#334155;
-
-    border:none;
-
-    border-radius:18px;
-
-    padding:0.7rem 1.4rem;
-
-    font-weight:600;
-
-    backdrop-filter:blur(18px);
-
-    box-shadow:
-    0 4px 15px rgba(0,0,0,0.05);
-
-    transition:0.3s;
-}
-
-/* HOVER BOTONES */
-.stButton>button:hover,
-.stDownloadButton>button:hover{
-
-    transform:translateY(-2px);
-
-    background:#FFFFFF;
-
-    color:#2563EB;
-
-    box-shadow:
-    0 8px 20px rgba(37,99,235,0.15);
-}
-
-/* ================= INPUTS ================= */
-input{
-
-    background:rgba(255,255,255,0.75) !important;
-
-    border:none !important;
-
-    border-radius:16px !important;
-
-    color:#334155 !important;
-
-    backdrop-filter:blur(18px);
-
-    box-shadow:
-    0 4px 15px rgba(0,0,0,0.04);
-}
-
-/* ================= SELECTBOX ================= */
-div[data-baseweb="select"]{
-
-    background:rgba(255,255,255,0.75);
-
-    border-radius:18px;
-
-    backdrop-filter:blur(18px);
-
-    box-shadow:
-    0 4px 15px rgba(0,0,0,0.04);
-}
-
-/* ================= RADIO ================= */
-div[role="radiogroup"]{
-
-    background:rgba(255,255,255,0.70);
-
-    padding:12px;
-
-    border-radius:22px;
-
-    backdrop-filter:blur(18px);
-
-    box-shadow:
-    0 4px 15px rgba(0,0,0,0.04);
-}
-
-/* ================= SIDEBAR ================= */
-section[data-testid="stSidebar"]{
-
-    background:rgba(255,255,255,0.60);
-
-    backdrop-filter:blur(18px);
-
-    border-right:1px solid rgba(255,255,255,0.5);
-}
-
-/* TEXTO SIDEBAR */
-section[data-testid="stSidebar"] *{
-    color:#475569 !important;
-}
-
-/* ================= SCROLL ================= */
-::-webkit-scrollbar{
-    width:10px;
-}
-
-::-webkit-scrollbar-thumb{
-    background:#CBD5E1;
-    border-radius:10px;
-}
-
-/* ================= EFECTOS GLOW ================= */
-.stMetric{
-
-    position:relative;
-}
-
-.stMetric::after{
-
-    content:"";
-
-    position:absolute;
-
-    width:120px;
-
-    height:120px;
-
-    background:rgba(255,255,255,0.25);
-
-    filter:blur(40px);
-
-    border-radius:50%;
-
-    top:-30px;
-
-    right:-20px;
-
-    z-index:0;
+    color:white;
 }
 
 </style>
@@ -793,15 +576,7 @@ if archivos:
                     resumen_preview,
                     use_container_width=True,
                     hide_index=True,
-                    height=altura_tabla(resumen_preview),
-
-                    column_config={
-                        "COMISION": st.column_config.NumberColumn(
-                            "COMISION",
-                            format="%.2f",
-                            width="large"
-                        )
-                    }
+                    height=altura_tabla(resumen_preview)
                 )
 
                 st.download_button(
@@ -811,7 +586,7 @@ if archivos:
                     ),
                     "total_comisiones_comercio.csv"
                 )
-               
+
 # ================= TODOS LOS MESES =================
 if archivos:
 
