@@ -30,9 +30,11 @@ st.markdown("""
 
 st.title("Analizador Financiero Payin")
 
-archivo = st.file_uploader(
+# ================= SUBIR VARIOS ARCHIVOS =================
+archivos = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
-    type=["xlsx", "csv", "zip"]
+    type=["xlsx", "csv", "zip"],
+    accept_multiple_files=True
 )
 
 def exportar_csv(df):
@@ -84,10 +86,18 @@ def cargar_archivo(file):
         return pd.read_excel(file, engine="openpyxl")
 
 # ================= PROCESAR =================
-if archivo is not None:
+if archivos:
 
-    df = cargar_archivo(archivo)
-    df.columns = df.columns.str.lower().str.strip()
+    dfs = []
+
+    for archivo in archivos:
+
+        df_temp = cargar_archivo(archivo)
+        df_temp.columns = df_temp.columns.str.lower().str.strip()
+
+        dfs.append(df_temp)
+
+    df = pd.concat(dfs, ignore_index=True)
 
     df_original = df.copy()
 
@@ -335,8 +345,32 @@ if archivo is not None:
                 "reporte_detallado_mes.csv"
             )
 
+            # ================= TOTAL COMISIONES POR COMERCIO =================
+            st.divider()
+
+            st.subheader("🏪 Total de comisiones por comercio")
+
+            resumen_comercios = (
+                reporte.groupby("COMERCIO", as_index=False)["COMISION"]
+                .sum()
+                .sort_values("COMISION", ascending=False)
+            )
+
+            resumen_comercios["COMISION"] = (
+                resumen_comercios["COMISION"]
+                .round(2)
+            )
+
+            st.dataframe(resumen_comercios)
+
+            st.download_button(
+                "📥 Descargar total comisiones por comercio",
+                exportar_csv(resumen_comercios),
+                "total_comisiones_comercio.csv"
+            )
+
 # ================= TODOS LOS MESES =================
-if archivo is not None:
+if archivos:
 
     st.subheader("📦 Reporte detallado (todos los meses)")
 
