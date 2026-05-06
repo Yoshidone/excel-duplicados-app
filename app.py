@@ -46,8 +46,9 @@ def exportar_csv(df):
     df.to_csv(buffer, index=False)
     return buffer.getvalue()
 
-# ================= LEER CSV RAPIDO CON POLARS PURO =================
+# ================= LEER CSV RAPIDO =================
 def leer_csv_seguro(f):
+
     contenido = f.read() if hasattr(f, "read") else f
 
     if isinstance(contenido, bytes):
@@ -56,8 +57,10 @@ def leer_csv_seguro(f):
         buffer = contenido
 
     for sep in [",", ";"]:
+
         try:
             buffer.seek(0)
+
             df = pl.read_csv(
                 buffer,
                 separator=sep,
@@ -66,7 +69,9 @@ def leer_csv_seguro(f):
                 low_memory=False,
                 rechunk=True,
             )
+
             return df.to_pandas()
+
         except Exception:
             continue
 
@@ -74,6 +79,7 @@ def leer_csv_seguro(f):
 
 # ================= LEER EXCEL =================
 def leer_excel_seguro(f):
+
     contenido = f.read() if hasattr(f, "read") else f
 
     return pd.read_excel(
@@ -84,7 +90,9 @@ def leer_excel_seguro(f):
 
 # ================= LEER PARQUET =================
 def leer_parquet_seguro(f):
+
     contenido = f.read() if hasattr(f, "read") else f
+
     return pd.read_parquet(io.BytesIO(contenido))
 
 # ================= CARGAR ARCHIVOS =================
@@ -179,6 +187,21 @@ if archivos:
 
     df = pd.concat(dfs, ignore_index=True)
 
+    # ================= DESCARGAR PARQUET =================
+    parquet_buffer = io.BytesIO()
+
+    df.to_parquet(
+        parquet_buffer,
+        index=False
+    )
+
+    st.download_button(
+        "📥 Descargar archivo convertido a Parquet",
+        parquet_buffer.getvalue(),
+        "archivo_convertido.parquet",
+        mime="application/octet-stream"
+    )
+
     del dfs
     gc.collect()
 
@@ -186,6 +209,7 @@ if archivos:
 
     placeholder_carga.success("✅ Archivo cargado correctamente")
 
+    # ================= OPCION REPORTE =================
     st.divider()
 
     opcion_reporte = st.radio(
@@ -195,6 +219,7 @@ if archivos:
         index=None
     )
 
+    # ================= CONTINUAR =================
     if opcion_reporte:
 
         st.divider()
@@ -220,7 +245,11 @@ if archivos:
             ["PEN", "USD"]
         )
 
-        mask = (df["mes"] == mes_sel) & (df["tx_currency_code"] == moneda_sel)
+        mask = (
+            (df["mes"] == mes_sel) &
+            (df["tx_currency_code"] == moneda_sel)
+        )
+
         df = df.loc[mask].copy()
 
         simbolo = "S/" if moneda_sel == "PEN" else "$"
@@ -229,16 +258,37 @@ if archivos:
         if opcion_reporte in ["Comparación de comisiones", "Ambas"]:
 
             st.divider()
-            st.subheader(f"Comparación de comisiones ({moneda_sel})")
 
-            porcentaje = st.number_input("Porcentaje comisión (%)", value=2.30)
-            fee_fijo = st.number_input(f"Fee fijo ({simbolo})", value=0.90)
+            st.subheader(
+                f"Comparación de comisiones ({moneda_sel})"
+            )
 
-            mask_py = df["tx_reference"].str.startswith("PY", na=False)
-            mask_sf = df["tx_reference"].str.startswith("SF", na=False)
+            porcentaje = st.number_input(
+                "Porcentaje comisión (%)",
+                value=2.30
+            )
+
+            fee_fijo = st.number_input(
+                f"Fee fijo ({simbolo})",
+                value=0.90
+            )
+
+            mask_py = df["tx_reference"].str.startswith(
+                "PY",
+                na=False
+            )
+
+            mask_sf = df["tx_reference"].str.startswith(
+                "SF",
+                na=False
+            )
 
             pagos = df.loc[mask_py].copy()
-            fees = df.loc[mask_sf, ["psp_tin", "tx_amount"]].copy()
+
+            fees = df.loc[
+                mask_sf,
+                ["psp_tin", "tx_amount"]
+            ].copy()
 
             comisiones = pagos.merge(
                 fees,
@@ -257,7 +307,11 @@ if archivos:
                 errors="coerce"
             )
 
-            base = comisiones["tx_amount_pago"] * (porcentaje / 100) + fee_fijo
+            base = (
+                comisiones["tx_amount_pago"] *
+                (porcentaje / 100)
+            ) + fee_fijo
+
             igv = (base * 0.18).round(2)
 
             comisiones = comisiones.assign(
@@ -268,11 +322,13 @@ if archivos:
             )
 
             comisiones["diferencia"] = (
-                comisiones["comision_real"] - comisiones["comision_final"]
+                comisiones["comision_real"] -
+                comisiones["comision_final"]
             ).round(2)
 
             comisiones["total_neto"] = (
-                comisiones["tx_amount_pago"] - comisiones["comision_real"]
+                comisiones["tx_amount_pago"] -
+                comisiones["comision_real"]
             ).round(2)
 
             cols_tabla = [
@@ -288,7 +344,10 @@ if archivos:
 
             tabla = comisiones[cols_tabla].fillna(0)
 
-            st.dataframe(tabla.head(500), use_container_width=True)
+            st.dataframe(
+                tabla.head(500),
+                use_container_width=True
+            )
 
             st.download_button(
                 "📥 Descargar comparación de comisiones",
@@ -296,6 +355,7 @@ if archivos:
                 "comisiones.csv"
             )
 
+            # ================= RESUMEN =================
             st.subheader("📊 Resumen financiero")
 
             total_recaudo = tabla["tx_amount_pago"].sum()
@@ -325,10 +385,20 @@ if archivos:
         if opcion_reporte in ["Reporte detallado", "Ambas"]:
 
             st.divider()
-            st.subheader("📄 Reporte detallado (mes seleccionado)")
 
-            mask_py = df["tx_reference"].str.startswith("PY", na=False)
-            mask_sf = df["tx_reference"].str.startswith("SF", na=False)
+            st.subheader(
+                "📄 Reporte detallado (mes seleccionado)"
+            )
+
+            mask_py = df["tx_reference"].str.startswith(
+                "PY",
+                na=False
+            )
+
+            mask_sf = df["tx_reference"].str.startswith(
+                "SF",
+                na=False
+            )
 
             pagos = df.loc[mask_py].copy()
             fees = df.loc[mask_sf].copy()
@@ -350,15 +420,23 @@ if archivos:
             )
 
             detalle = pagos.merge(
-                fees[["psp_tin", "COMISION", "SF_operation_no"]],
+                fees[
+                    ["psp_tin", "COMISION", "SF_operation_no"]
+                ],
                 on="psp_tin",
                 how="left"
             )
 
             def col(name):
-                return detalle[name] if name in detalle.columns else pd.Series("", index=detalle.index)
+
+                return (
+                    detalle[name]
+                    if name in detalle.columns
+                    else pd.Series("", index=detalle.index)
+                )
 
             reporte = pd.DataFrame({
+
                 "FECHA": col("x_create_date_gmt_peru"),
                 "COMERCIO": col("com_nombre"),
                 "MONEDA": col("tx_currency_code"),
@@ -368,12 +446,24 @@ if archivos:
                 "PY_operation_no": detalle["PY_operation_no"],
                 "SF_operation_no": detalle["SF_operation_no"],
                 "RECAUDO": detalle["RECAUDO"],
-                "COMISION": pd.to_numeric(detalle["COMISION"], errors="coerce").abs(),
+
+                "COMISION": pd.to_numeric(
+                    detalle["COMISION"],
+                    errors="coerce"
+                ).abs(),
+
                 "SET_referencia": col("set_referencia"),
-                "Fecha Transferencia": col("fecha transferencia"),
+
+                "Fecha Transferencia": col(
+                    "fecha transferencia"
+                ),
+
             }).fillna(0)
 
-            st.dataframe(reporte.head(500), use_container_width=True)
+            st.dataframe(
+                reporte.head(500),
+                use_container_width=True
+            )
 
             st.download_button(
                 "📥 Descargar reporte detallado (mes)",
@@ -381,18 +471,34 @@ if archivos:
                 "reporte_detallado_mes.csv"
             )
 
+            # ================= TOTAL COMISIONES =================
             st.divider()
-            st.subheader("🏪 Total de comisiones por comercio")
 
-            resumen_comercios = (
-                reporte.groupby("COMERCIO", as_index=False)["COMISION"]
-                .sum()
-                .sort_values("COMISION", ascending=False)
+            st.subheader(
+                "🏪 Total de comisiones por comercio"
             )
 
-            resumen_comercios["COMISION"] = resumen_comercios["COMISION"].round(2)
+            resumen_comercios = (
+                reporte.groupby(
+                    "COMERCIO",
+                    as_index=False
+                )["COMISION"]
+                .sum()
+                .sort_values(
+                    "COMISION",
+                    ascending=False
+                )
+            )
 
-            st.dataframe(resumen_comercios.head(500), use_container_width=True)
+            resumen_comercios["COMISION"] = (
+                resumen_comercios["COMISION"]
+                .round(2)
+            )
+
+            st.dataframe(
+                resumen_comercios.head(500),
+                use_container_width=True
+            )
 
             st.download_button(
                 "📥 Descargar resumen comercios",
@@ -403,12 +509,21 @@ if archivos:
 # ================= TODOS LOS MESES =================
 if archivos:
 
-    st.subheader("📦 Reporte detallado (todos los meses)")
+    st.subheader(
+        "📦 Reporte detallado (todos los meses)"
+    )
 
     df_full = df_original.copy()
 
-    mask_py_f = df_full["tx_reference"].str.startswith("PY", na=False)
-    mask_sf_f = df_full["tx_reference"].str.startswith("SF", na=False)
+    mask_py_f = df_full["tx_reference"].str.startswith(
+        "PY",
+        na=False
+    )
+
+    mask_sf_f = df_full["tx_reference"].str.startswith(
+        "SF",
+        na=False
+    )
 
     pagos_full = df_full.loc[mask_py_f].copy()
     fees_full = df_full.loc[mask_sf_f].copy()
@@ -430,15 +545,23 @@ if archivos:
     )
 
     detalle_full = pagos_full.merge(
-        fees_full[["psp_tin", "COMISION", "SF_operation_no"]],
+        fees_full[
+            ["psp_tin", "COMISION", "SF_operation_no"]
+        ],
         on="psp_tin",
         how="left"
     )
 
     def col_f(name):
-        return detalle_full[name] if name in detalle_full.columns else pd.Series("", index=detalle_full.index)
+
+        return (
+            detalle_full[name]
+            if name in detalle_full.columns
+            else pd.Series("", index=detalle_full.index)
+        )
 
     reporte_full = pd.DataFrame({
+
         "FECHA": col_f("x_create_date_gmt_peru"),
         "COMERCIO": col_f("com_nombre"),
         "MONEDA": col_f("tx_currency_code"),
@@ -448,9 +571,18 @@ if archivos:
         "PY_operation_no": detalle_full["PY_operation_no"],
         "SF_operation_no": detalle_full["SF_operation_no"],
         "RECAUDO": detalle_full["RECAUDO"],
-        "COMISION": pd.to_numeric(detalle_full["COMISION"], errors="coerce").abs(),
+
+        "COMISION": pd.to_numeric(
+            detalle_full["COMISION"],
+            errors="coerce"
+        ).abs(),
+
         "SET_referencia": col_f("set_referencia"),
-        "Fecha Transferencia": col_f("fecha transferencia"),
+
+        "Fecha Transferencia": col_f(
+            "fecha transferencia"
+        ),
+
     }).fillna(0)
 
     st.download_button(
