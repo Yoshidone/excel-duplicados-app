@@ -789,8 +789,6 @@ if archivos:
 
                 resumen_preview=resumen_comercios.head(500)
 
-                    resumen_preview=resumen_comercios.head(500)
-
                 st.dataframe(
                     resumen_preview,
                     use_container_width=True,
