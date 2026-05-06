@@ -154,6 +154,16 @@ if archivos:
             .str.upper()
         )
 
+        # ================= CORREGIR MONEDAS =================
+        df["tx_currency_code"]=(
+            df["tx_currency_code"]
+            .replace({
+                "BOLÍGRAFO":"PEN",
+                "DÓLAR ESTADOUNIDENSE":"USD",
+                "DOLAR ESTADOUNIDENSE":"USD"
+            })
+        )
+
         df["tx_reference"]=(
             df["tx_reference"]
             .astype(str)
@@ -196,17 +206,9 @@ if archivos:
                 sorted(df["mes"].dropna().unique())
             )
 
-            # ================= MONEDAS DINAMICAS =================
-            monedas=sorted(
-                df["tx_currency_code"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-
             moneda_sel=col2.selectbox(
                 "Selecciona moneda",
-                monedas
+                ["PEN","USD"]
             )
 
             df=df[
@@ -214,10 +216,7 @@ if archivos:
                 (df["tx_currency_code"]==moneda_sel)
             ]
 
-            if moneda_sel in ["PEN","SOL","SOLES","BOLÍGRAFO"]:
-                simbolo="S/"
-            else:
-                simbolo="$"
+            simbolo="S/" if moneda_sel=="PEN" else "$"
 
             # ================= COMPARACION =================
             if opcion_reporte in [
