@@ -789,12 +789,20 @@ if archivos:
 
                 resumen_preview=resumen_comercios.head(500)
 
-                st.dataframe(
-                    resumen_preview,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=altura_tabla(resumen_preview)
-                )
+     st.dataframe(
+    resumen_preview,
+    use_container_width=True,
+    hide_index=True,
+    height=altura_tabla(resumen_preview),
+
+    column_config={
+        "COMISION": st.column_config.NumberColumn(
+            "COMISION",
+            format="%.2f",
+            width="medium"
+        )
+    }
+)
 
                 st.download_button(
                     "📥 Descargar total comisiones por comercio",
