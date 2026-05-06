@@ -9,6 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# ================= ESTILO =================
 st.markdown("""
 <style>
 .block-container {
@@ -33,18 +34,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Analizador Financiero Payin")
+st.title("📊 Analizador Financiero Payin")
 
-# ================= SUBIR VARIOS ARCHIVOS =================
+# ================= SUBIR ARCHIVOS =================
 archivos = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
     type=["xlsx", "csv", "zip"],
     accept_multiple_files=True
 )
 
-# ================= EXPORTAR =================
+# ================= EXPORTAR CSV =================
 def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
+
+# ================= COLUMNAS NECESARIAS =================
+columnas_necesarias = [
+    "x_create_date_gmt_peru",
+    "tx_currency_code",
+    "tx_reference",
+    "tx_amount",
+    "psp_tin",
+    "deb_nombre",
+    "com_nombre",
+    "tipo",
+    "set_referencia",
+    "fecha transferencia"
+]
 
 # ================= LEER CSV RAPIDO =================
 def leer_csv_seguro(f):
@@ -68,7 +83,7 @@ def leer_csv_seguro(f):
 
     raise ValueError("No se pudo leer el CSV")
 
-# ================= CARGAR ARCHIVOS =================
+# ================= CARGAR ARCHIVO =================
 @st.cache_data
 def cargar_archivo(file):
 
@@ -77,7 +92,22 @@ def cargar_archivo(file):
     # ================= CSV =================
     if nombre.endswith(".csv"):
 
-        return leer_csv_seguro(file)
+        df_csv = leer_csv_seguro(file)
+
+        df_csv.columns = (
+            df_csv.columns
+            .str.lower()
+            .str.strip()
+        )
+
+        df_csv = df_csv[
+            [
+                c for c in columnas_necesarias
+                if c in df_csv.columns
+            ]
+        ]
+
+        return df_csv
 
     # ================= ZIP =================
     elif nombre.endswith(".zip"):
@@ -103,6 +133,13 @@ def cargar_archivo(file):
                             .str.strip()
                         )
 
+                        df_zip = df_zip[
+                            [
+                                c for c in columnas_necesarias
+                                if c in df_zip.columns
+                            ]
+                        ]
+
                         dfs_zip.append(df_zip)
 
                 # ================= EXCEL EN ZIP =================
@@ -121,20 +158,47 @@ def cargar_archivo(file):
                             .str.strip()
                         )
 
+                        df_zip = df_zip[
+                            [
+                                c for c in columnas_necesarias
+                                if c in df_zip.columns
+                            ]
+                        ]
+
                         dfs_zip.append(df_zip)
 
         if dfs_zip:
-            return pd.concat(dfs_zip, ignore_index=True)
 
-        raise ValueError("ZIP sin CSV ni Excel")
+            return pd.concat(
+                dfs_zip,
+                ignore_index=True,
+                copy=False
+            )
+
+        raise ValueError("ZIP sin archivos válidos")
 
     # ================= EXCEL =================
     else:
 
-        return pd.read_excel(
+        df_excel = pd.read_excel(
             file,
             engine="calamine"
         )
+
+        df_excel.columns = (
+            df_excel.columns
+            .str.lower()
+            .str.strip()
+        )
+
+        df_excel = df_excel[
+            [
+                c for c in columnas_necesarias
+                if c in df_excel.columns
+            ]
+        ]
+
+        return df_excel
 
 # ================= PROCESAR =================
 if archivos:
@@ -147,20 +211,20 @@ if archivos:
 
             df_temp = cargar_archivo(archivo)
 
-            df_temp.columns = (
-                df_temp.columns
-                .str.lower()
-                .str.strip()
-            )
-
             dfs.append(df_temp)
 
-        df = pd.concat(dfs, ignore_index=True)
+        df = pd.concat(
+            dfs,
+            ignore_index=True,
+            copy=False
+        )
 
-        df_original = df.copy()
+        # EVITAR DUPLICAR RAM
+        df_original = df
 
-        st.success("Archivo cargado correctamente")
+        st.success("✅ Archivo cargado correctamente")
 
+        # ================= LIMPIEZA =================
         df["tx_currency_code"] = (
             df["tx_currency_code"]
             .astype(str)
@@ -187,7 +251,6 @@ if archivos:
             index=None
         )
 
-        # SOLO CONTINUAR SI ELIGE OPCION
         if opcion_reporte:
 
             # ================= FILTROS =================
@@ -235,7 +298,7 @@ if archivos:
                 st.divider()
 
                 st.subheader(
-                    f"Comparación de comisiones ({moneda_sel})"
+                    f"📋 Comparación de comisiones ({moneda_sel})"
                 )
 
                 porcentaje = st.number_input(
@@ -261,7 +324,8 @@ if archivos:
                 comisiones = pagos.merge(
                     fees[[
                         "psp_tin",
-                        "tx_amount"
+                        "tx_amount",
+                        "tx_reference"
                     ]],
                     on="psp_tin",
                     how="left",
@@ -271,18 +335,21 @@ if archivos:
                     )
                 )
 
-                comisiones["tx_amount_pago"] = (
-                    pd.to_numeric(
-                        comisiones["tx_amount_pago"],
-                        errors="coerce"
-                    )
+                comisiones.rename(
+                    columns={
+                        "tx_reference": "SF_operation_no"
+                    },
+                    inplace=True
                 )
 
-                comisiones["tx_amount_comision"] = (
-                    pd.to_numeric(
-                        comisiones["tx_amount_comision"],
-                        errors="coerce"
-                    )
+                comisiones["tx_amount_pago"] = pd.to_numeric(
+                    comisiones["tx_amount_pago"],
+                    errors="coerce"
+                )
+
+                comisiones["tx_amount_comision"] = pd.to_numeric(
+                    comisiones["tx_amount_comision"],
+                    errors="coerce"
                 )
 
                 comisiones["comision_real"] = (
@@ -327,7 +394,8 @@ if archivos:
                         "igv",
                         "comision_final",
                         "diferencia",
-                        "total_neto"
+                        "total_neto",
+                        "SF_operation_no"
                     ]
                 ].fillna(0)
 
@@ -338,48 +406,21 @@ if archivos:
                 )
 
                 st.download_button(
-                    "📥 Descargar comparación de comisiones",
+                    "📥 Descargar comparación",
                     exportar_csv(tabla),
-                    "comisiones.csv"
+                    "comparacion_comisiones.csv"
                 )
 
-                # ================= RESUMEN =================
-                st.subheader("📊 Resumen financiero")
+                # ================= METRICAS =================
+                st.divider()
 
                 total_recaudo = tabla["tx_amount_pago"].sum()
-                total_base = tabla["comision_base"].sum()
+                total_comisiones = tabla["comision_real"].sum()
+                total_igv = tabla["igv"].sum()
+                total_neto = tabla["total_neto"].sum()
+                total_operaciones = tabla["psp_tin"].nunique()
 
-                total_igv = round(
-                    total_base * 0.18,
-                    2
-                )
-
-                total_final = round(
-                    total_base + total_igv,
-                    2
-                )
-
-                total_comisiones = round(
-                    tabla["comision_real"].sum(),
-                    2
-                )
-
-                total_neto = round(
-                    tabla["total_neto"].sum(),
-                    2
-                )
-
-                total_diferencia = round(
-                    total_comisiones - total_final,
-                    2
-                )
-
-                operaciones = (
-                    tabla["psp_tin"]
-                    .nunique()
-                )
-
-                c1, c2, c3, c4 = st.columns(4)
+                c1, c2, c3, c4, c5 = st.columns(5)
 
                 c1.metric(
                     "💰 Recaudado",
@@ -392,35 +433,18 @@ if archivos:
                 )
 
                 c3.metric(
-                    "🧾 Base",
-                    f"{simbolo} {total_base:,.2f}"
-                )
-
-                c4.metric(
-                    "🏛 IGV",
+                    "🏛️ IGV",
                     f"{simbolo} {total_igv:,.2f}"
                 )
 
-                c5, c6, c7, c8 = st.columns(4)
+                c4.metric(
+                    "🧾 Neto",
+                    f"{simbolo} {total_neto:,.2f}"
+                )
 
                 c5.metric(
-                    "📑 Final",
-                    f"{simbolo} {total_final:,.2f}"
-                )
-
-                c6.metric(
-                    "⚖️ Diferencia",
-                    f"{simbolo} {total_diferencia:,.2f}"
-                )
-
-                c7.metric(
                     "🔢 Operaciones",
-                    f"{operaciones:,}"
-                )
-
-                c8.metric(
-                    "🧮 Neto",
-                    f"{simbolo} {total_neto:,.2f}"
+                    total_operaciones
                 )
 
             # ================= REPORTE DETALLADO =================
@@ -432,7 +456,7 @@ if archivos:
                 st.divider()
 
                 st.subheader(
-                    "📄 Reporte detallado (mes seleccionado)"
+                    "📄 Reporte detallado"
                 )
 
                 pagos = df[
@@ -523,12 +547,12 @@ if archivos:
                 )
 
                 st.download_button(
-                    "📥 Descargar reporte detallado (mes)",
+                    "📥 Descargar reporte detallado",
                     exportar_csv(reporte),
-                    "reporte_detallado_mes.csv"
+                    "reporte_detallado.csv"
                 )
 
-                # ================= TOTAL COMISIONES POR COMERCIO =================
+                # ================= RESUMEN COMERCIOS =================
                 st.divider()
 
                 st.subheader(
@@ -559,29 +583,29 @@ if archivos:
                 )
 
                 st.download_button(
-                    "📥 Descargar total comisiones por comercio",
+                    "📥 Descargar resumen comercios",
                     exportar_csv(
                         resumen_comercios
                     ),
-                    "total_comisiones_comercio.csv"
+                    "resumen_comercios.csv"
                 )
 
 # ================= TODOS LOS MESES =================
 if archivos:
 
+    st.divider()
+
     st.subheader(
         "📦 Reporte detallado (todos los meses)"
     )
 
-    df_full = df_original.copy()
-
-    pagos_full = df_full[
-        df_full["tx_reference"]
+    pagos_full = df_original[
+        df_original["tx_reference"]
         .str.startswith("PY", na=False)
     ].copy()
 
-    fees_full = df_full[
-        df_full["tx_reference"]
+    fees_full = df_original[
+        df_original["tx_reference"]
         .str.startswith("SF", na=False)
     ].copy()
 
@@ -657,7 +681,7 @@ if archivos:
     }).fillna(0)
 
     st.download_button(
-        "📥 Descargar reporte detallado (todos)",
+        "📥 Descargar reporte detallado completo",
         exportar_csv(reporte_full),
         "reporte_detallado_todos.csv"
     )
