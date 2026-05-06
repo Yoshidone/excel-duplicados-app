@@ -9,134 +9,141 @@ st.set_page_config(page_title="Analizador Financiero Payin",layout="wide")
 st.markdown("""
 <style>
 
-/* Fondo general */
+/* Fondo */
 .stApp{
-background:#f5f7fb;
+background-color:#0f172a;
 }
 
 /* Contenedor */
 .block-container{
-padding-top:1.5rem;
+padding-top:2rem;
 padding-bottom:2rem;
-max-width:1450px;
+max-width:1400px;
 }
 
-/* Header */
+/* Titulo */
 h1{
+color:white !important;
 font-size:52px !important;
 font-weight:800 !important;
-color:#111827 !important;
-margin-bottom:5px;
+letter-spacing:-1px;
 }
 
+/* Subtitulos */
 h2,h3{
-color:#111827 !important;
+color:white !important;
 font-weight:700 !important;
 }
 
-/* Texto */
+/* Textos */
 label,p,span{
-color:#374151 !important;
+color:#e5e7eb !important;
 }
 
-/* Upload */
+/* Upload moderno */
 [data-testid="stFileUploader"]{
-background:white;
-border:2px dashed #cbd5e1;
-padding:25px;
-border-radius:22px;
-box-shadow:0 4px 18px rgba(0,0,0,0.05);
+background:linear-gradient(135deg,#111827,#1f2937);
+padding:30px;
+border-radius:20px;
+border:2px dashed #3b82f6;
+box-shadow:0 4px 15px rgba(0,0,0,0.25);
 }
 
-/* Cards métricas */
+/* Hover uploader */
+[data-testid="stFileUploader"]:hover{
+border:2px dashed #60a5fa;
+}
+
+/* Cards metrics */
 [data-testid="metric-container"]{
-background:white;
-border-radius:22px;
-padding:22px;
-border:1px solid #e5e7eb;
-box-shadow:0 4px 18px rgba(0,0,0,0.05);
+background:linear-gradient(135deg,#111827,#1f2937);
+border:1px solid #374151;
+padding:18px;
+border-radius:18px;
+box-shadow:0 4px 15px rgba(0,0,0,0.25);
 transition:0.3s;
 }
 
 [data-testid="metric-container"]:hover{
 transform:translateY(-2px);
-box-shadow:0 8px 24px rgba(0,0,0,0.08);
+box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
 
 [data-testid="metric-container"] label{
-color:#6b7280 !important;
+color:#9ca3af !important;
 font-size:14px;
-font-weight:600;
 }
 
 [data-testid="metric-container"] div{
-color:#111827 !important;
-font-weight:700;
+color:white !important;
 }
 
 /* Dataframes */
 [data-testid="stDataFrame"]{
-background:white;
-border-radius:20px;
-padding:10px;
-border:1px solid #e5e7eb;
-box-shadow:0 4px 18px rgba(0,0,0,0.05);
+border-radius:16px;
 overflow:hidden;
+border:1px solid #374151;
+margin-top:10px;
+margin-bottom:10px;
 }
 
 /* Selectbox */
 .stSelectbox div[data-baseweb="select"]{
-background:white;
-border-radius:16px;
-border:1px solid #d1d5db;
-min-height:48px;
-}
-
-/* Inputs */
-.stNumberInput input{
-background:white !important;
-border-radius:14px !important;
-border:1px solid #d1d5db !important;
+background-color:#111827;
+border-radius:12px;
+border:1px solid #374151;
 }
 
 /* Radio */
 .stRadio > div{
-background:white;
-padding:15px;
-border-radius:18px;
-border:1px solid #e5e7eb;
-box-shadow:0 4px 18px rgba(0,0,0,0.05);
+background-color:#111827;
+padding:12px;
+border-radius:14px;
+border:1px solid #374151;
 }
 
 /* Botones */
 .stDownloadButton button,
 .stButton button{
-background:linear-gradient(135deg,#2563eb,#3b82f6);
+background:linear-gradient(135deg,#2563eb,#1d4ed8);
 color:white;
 border:none;
-padding:12px 22px;
-border-radius:14px;
-font-weight:700;
+border-radius:12px;
+padding:10px 18px;
+font-weight:600;
 transition:0.3s;
 }
 
 .stDownloadButton button:hover,
 .stButton button:hover{
 transform:scale(1.02);
-background:linear-gradient(135deg,#1d4ed8,#2563eb);
+background:linear-gradient(135deg,#1d4ed8,#1e40af);
+}
+
+/* Inputs */
+.stNumberInput input{
+background-color:#111827 !important;
+color:white !important;
+border-radius:10px !important;
 }
 
 /* Success */
 .stSuccess{
-background:#ecfdf5;
-border-radius:18px;
-padding:15px;
+border-radius:14px;
 }
 
-/* Divider */
+/* Sidebar */
+section[data-testid="stSidebar"]{
+background:#111827;
+}
+
+/* Divider elegante */
 hr{
-margin-top:2rem;
-margin-bottom:2rem;
+border:0;
+height:1px;
+background:#374151;
+margin-top:30px;
+margin-bottom:30px;
 }
 
 /* Scroll */
@@ -146,7 +153,7 @@ height:10px;
 }
 
 ::-webkit-scrollbar-thumb{
-background:#cbd5e1;
+background:#374151;
 border-radius:10px;
 }
 
@@ -195,10 +202,12 @@ def cargar_archivo(file):
 
     nombre=file.name.lower()
 
+    # ================= CSV =================
     if nombre.endswith(".csv"):
 
         return leer_csv_seguro(file)
 
+    # ================= ZIP =================
     elif nombre.endswith(".zip"):
 
         dfs_zip=[]
@@ -207,6 +216,7 @@ def cargar_archivo(file):
 
             for nombre_archivo in z.namelist():
 
+                # ================= CSV EN ZIP =================
                 if nombre_archivo.lower().endswith(".csv"):
 
                     with z.open(nombre_archivo) as f:
@@ -223,6 +233,7 @@ def cargar_archivo(file):
 
                         dfs_zip.append(df_zip)
 
+                # ================= EXCEL EN ZIP =================
                 elif nombre_archivo.lower().endswith((".xlsx",".xls")):
 
                     with z.open(nombre_archivo) as f:
@@ -245,6 +256,7 @@ def cargar_archivo(file):
 
         raise ValueError("ZIP sin CSV ni Excel")
 
+    # ================= EXCEL =================
     else:
 
         return pd.read_excel(
@@ -283,6 +295,7 @@ if archivos:
             .str.upper()
         )
 
+        # ================= CORREGIR MONEDAS =================
         df["tx_currency_code"]=(
             df["tx_currency_code"]
             .replace({
@@ -298,6 +311,7 @@ if archivos:
             .str.upper()
         )
 
+        # ================= OPCION REPORTE =================
         st.divider()
 
         opcion_reporte=st.radio(
@@ -313,6 +327,7 @@ if archivos:
 
         if opcion_reporte:
 
+            # ================= FILTROS =================
             st.divider()
 
             col1,col2=st.columns(2)
@@ -328,12 +343,12 @@ if archivos:
             )
 
             mes_sel=col1.selectbox(
-                "📅 Selecciona un mes",
+                "Selecciona un mes",
                 sorted(df["mes"].dropna().unique())
             )
 
             moneda_sel=col2.selectbox(
-                "💵 Selecciona moneda",
+                "Selecciona moneda",
                 ["PEN","USD"]
             )
 
@@ -353,17 +368,15 @@ if archivos:
                 st.divider()
 
                 st.subheader(
-                    f"💰 Comparación de comisiones ({moneda_sel})"
+                    f"Comparación de comisiones ({moneda_sel})"
                 )
 
-                col3,col4=st.columns(2)
-
-                porcentaje=col3.number_input(
+                porcentaje=st.number_input(
                     "Porcentaje comisión (%)",
                     value=2.30
                 )
 
-                fee_fijo=col4.number_input(
+                fee_fijo=st.number_input(
                     f"Fee fijo ({simbolo})",
                     value=0.90
                 )
@@ -391,14 +404,18 @@ if archivos:
                     )
                 )
 
-                comisiones["tx_amount_pago"]=pd.to_numeric(
-                    comisiones["tx_amount_pago"],
-                    errors="coerce"
+                comisiones["tx_amount_pago"]=(
+                    pd.to_numeric(
+                        comisiones["tx_amount_pago"],
+                        errors="coerce"
+                    )
                 )
 
-                comisiones["tx_amount_comision"]=pd.to_numeric(
-                    comisiones["tx_amount_comision"],
-                    errors="coerce"
+                comisiones["tx_amount_comision"]=(
+                    pd.to_numeric(
+                        comisiones["tx_amount_comision"],
+                        errors="coerce"
+                    )
                 )
 
                 comisiones["comision_real"]=(
@@ -448,7 +465,7 @@ if archivos:
                 ].fillna(0)
 
                 st.dataframe(
-                    tabla.head(100),
+                    tabla.head(500),
                     use_container_width=True
                 )
 
@@ -457,28 +474,3 @@ if archivos:
                     exportar_csv(tabla),
                     "comisiones.csv"
                 )
-
-                st.subheader("📊 Resumen financiero")
-
-                total_recaudo=tabla["tx_amount_pago"].sum()
-                total_base=tabla["comision_base"].sum()
-                total_igv=round(total_base*0.18,2)
-                total_final=round(total_base+total_igv,2)
-                total_comisiones=round(tabla["comision_real"].sum(),2)
-                total_neto=round(tabla["total_neto"].sum(),2)
-                total_diferencia=round(total_comisiones-total_final,2)
-                operaciones=tabla["psp_tin"].nunique()
-
-                c1,c2,c3,c4=st.columns(4)
-
-                c1.metric("💰 Recaudado",f"{simbolo} {total_recaudo:,.2f}")
-                c2.metric("💸 Comisiones",f"{simbolo} {total_comisiones:,.2f}")
-                c3.metric("🧾 Base",f"{simbolo} {total_base:,.2f}")
-                c4.metric("🏛 IGV",f"{simbolo} {total_igv:,.2f}")
-
-                c5,c6,c7,c8=st.columns(4)
-
-                c5.metric("📑 Final",f"{simbolo} {total_final:,.2f}")
-                c6.metric("⚖️ Diferencia",f"{simbolo} {total_diferencia:,.2f}")
-                c7.metric("🔢 Operaciones",f"{operaciones:,}")
-                c8.metric("🧮 Neto",f"{simbolo} {total_neto:,.2f}")
