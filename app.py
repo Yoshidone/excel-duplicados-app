@@ -30,7 +30,7 @@ st.markdown("""
 
 st.title("Analizador Financiero Payin")
 
-# ================= SUBIR VARIOS ARCHIVOS =================
+# ================= SUBIR ARCHIVOS =================
 archivos = st.file_uploader(
     "Sube tus archivos Excel, CSV o ZIP",
     type=["xlsx", "csv", "zip"],
@@ -41,16 +41,21 @@ def exportar_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 def leer_csv_seguro(f):
+
     for sep in [",", ";"]:
+
         try:
             f.seek(0)
+
             return pd.read_csv(
                 f,
                 sep=sep,
                 decimal=".",
                 encoding="utf-8",
-                low_memory=False
+                low_memory=False,
+                dtype=str
             )
+
         except:
             continue
 
@@ -62,6 +67,7 @@ def cargar_archivo(file):
     nombre = file.name.lower()
 
     if nombre.endswith(".csv"):
+
         return leer_csv_seguro(file)
 
     elif nombre.endswith(".zip"):
@@ -78,19 +84,35 @@ def cargar_archivo(file):
                 if nombre_archivo.lower().endswith((".xlsx", ".xls")):
 
                     with z.open(nombre_archivo) as f:
-                        return pd.read_excel(f, engine="openpyxl")
+
+                        return pd.read_excel(
+                            f,
+                            engine="openpyxl",
+                            dtype=str
+                        )
 
         raise ValueError("ZIP sin CSV ni Excel")
 
     else:
-        return pd.read_excel(file, engine="openpyxl")
+
+        return pd.read_excel(
+            file,
+            engine="openpyxl",
+            dtype=str
+        )
 
 # ================= PROCESAR =================
 if archivos:
 
-    dfs = []
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
 
-    for archivo in archivos:
+    dfs = []
+    total_archivos = len(archivos)
+
+    for i, archivo in enumerate(archivos):
+
+        progress_text.text(f"⏳ Procesando: {archivo.name}")
 
         df_temp = cargar_archivo(archivo)
 
@@ -102,14 +124,26 @@ if archivos:
 
         dfs.append(df_temp)
 
+        progreso = (i + 1) / total_archivos
+        progress_bar.progress(progreso)
+
+    progress_text.success("✅ Archivos procesados correctamente")
+
     df = pd.concat(dfs, ignore_index=True)
 
     df_original = df.copy()
 
-    st.success("Archivos cargados correctamente")
+    df["tx_currency_code"] = (
+        df["tx_currency_code"]
+        .astype(str)
+        .str.upper()
+    )
 
-    df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
-    df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
+    df["tx_reference"] = (
+        df["tx_reference"]
+        .astype(str)
+        .str.upper()
+    )
 
     # ================= OPCION REPORTE =================
     st.divider()
@@ -121,10 +155,9 @@ if archivos:
         index=None
     )
 
-    # SOLO CONTINUAR SI ELIGE OPCION
+    # ================= CONTINUAR =================
     if opcion_reporte:
 
-        # ================= FILTROS =================
         st.divider()
 
         col1, col2 = st.columns(2)
@@ -157,7 +190,10 @@ if archivos:
         if opcion_reporte in ["Comparación de comisiones", "Ambas"]:
 
             st.divider()
-            st.subheader(f"Comparación de comisiones ({moneda_sel})")
+
+            st.subheader(
+                f"Comparación de comisiones ({moneda_sel})"
+            )
 
             porcentaje = st.number_input(
                 "Porcentaje comisión (%)",
@@ -169,8 +205,15 @@ if archivos:
                 value=0.90
             )
 
-            pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
-            fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+            pagos = df[
+                df["tx_reference"]
+                .str.startswith("PY", na=False)
+            ].copy()
+
+            fees = df[
+                df["tx_reference"]
+                .str.startswith("SF", na=False)
+            ].copy()
 
             comisiones = pagos.merge(
                 fees[["psp_tin", "tx_amount"]],
@@ -189,7 +232,10 @@ if archivos:
                 errors="coerce"
             )
 
-            comisiones["comision_real"] = comisiones["tx_amount_comision"].abs()
+            comisiones["comision_real"] = (
+                comisiones["tx_amount_comision"]
+                .abs()
+            )
 
             comisiones["comision_base"] = (
                 (comisiones["tx_amount_pago"] * (porcentaje / 100))
@@ -205,11 +251,13 @@ if archivos:
             ).round(2)
 
             comisiones["diferencia"] = (
-                comisiones["comision_real"] - comisiones["comision_final"]
+                comisiones["comision_real"]
+                - comisiones["comision_final"]
             ).round(2)
 
             comisiones["total_neto"] = (
-                comisiones["tx_amount_pago"] - comisiones["comision_real"]
+                comisiones["tx_amount_pago"]
+                - comisiones["comision_real"]
             ).round(2)
 
             tabla = comisiones[
@@ -242,8 +290,15 @@ if archivos:
             total_igv = round(total_base * 0.18, 2)
             total_final = round(total_base + total_igv, 2)
 
-            total_comisiones = round(tabla["comision_real"].sum(), 2)
-            total_neto = round(tabla["total_neto"].sum(), 2)
+            total_comisiones = round(
+                tabla["comision_real"].sum(),
+                2
+            )
+
+            total_neto = round(
+                tabla["total_neto"].sum(),
+                2
+            )
 
             total_diferencia = round(
                 total_comisiones - total_final,
@@ -254,26 +309,66 @@ if archivos:
 
             c1, c2, c3, c4 = st.columns(4)
 
-            c1.metric("💰 Recaudado", f"{simbolo} {total_recaudo:,.2f}")
-            c2.metric("💸 Comisiones", f"{simbolo} {total_comisiones:,.2f}")
-            c3.metric("🧾 Base", f"{simbolo} {total_base:,.2f}")
-            c4.metric("🏛 IGV", f"{simbolo} {total_igv:,.2f}")
+            c1.metric(
+                "💰 Recaudado",
+                f"{simbolo} {total_recaudo:,.2f}"
+            )
+
+            c2.metric(
+                "💸 Comisiones",
+                f"{simbolo} {total_comisiones:,.2f}"
+            )
+
+            c3.metric(
+                "🧾 Base",
+                f"{simbolo} {total_base:,.2f}"
+            )
+
+            c4.metric(
+                "🏛 IGV",
+                f"{simbolo} {total_igv:,.2f}"
+            )
 
             c5, c6, c7, c8 = st.columns(4)
 
-            c5.metric("📑 Final", f"{simbolo} {total_final:,.2f}")
-            c6.metric("⚖️ Diferencia", f"{simbolo} {total_diferencia:,.2f}")
-            c7.metric("🔢 Operaciones", f"{operaciones:,}")
-            c8.metric("🧮 Neto", f"{simbolo} {total_neto:,.2f}")
+            c5.metric(
+                "📑 Final",
+                f"{simbolo} {total_final:,.2f}"
+            )
+
+            c6.metric(
+                "⚖️ Diferencia",
+                f"{simbolo} {total_diferencia:,.2f}"
+            )
+
+            c7.metric(
+                "🔢 Operaciones",
+                f"{operaciones:,}"
+            )
+
+            c8.metric(
+                "🧮 Neto",
+                f"{simbolo} {total_neto:,.2f}"
+            )
 
         # ================= REPORTE DETALLADO =================
         if opcion_reporte in ["Reporte detallado", "Ambas"]:
 
             st.divider()
-            st.subheader("📄 Reporte detallado (mes seleccionado)")
 
-            pagos = df[df["tx_reference"].str.startswith("PY", na=False)].copy()
-            fees = df[df["tx_reference"].str.startswith("SF", na=False)].copy()
+            st.subheader(
+                "📄 Reporte detallado (mes seleccionado)"
+            )
+
+            pagos = df[
+                df["tx_reference"]
+                .str.startswith("PY", na=False)
+            ].copy()
+
+            fees = df[
+                df["tx_reference"]
+                .str.startswith("SF", na=False)
+            ].copy()
 
             pagos.rename(
                 columns={
@@ -292,7 +387,9 @@ if archivos:
             )
 
             detalle = pagos.merge(
-                fees[["psp_tin", "COMISION", "SF_operation_no"]],
+                fees[
+                    ["psp_tin", "COMISION", "SF_operation_no"]
+                ],
                 on="psp_tin",
                 how="left"
             )
@@ -320,15 +417,21 @@ if archivos:
                 "reporte_detallado_mes.csv"
             )
 
-            # ================= TOTAL COMISIONES POR COMERCIO =================
+            # ================= TOTAL COMISIONES =================
             st.divider()
 
             st.subheader("🏪 Total de comisiones por comercio")
 
             resumen_comercios = (
-                reporte.groupby("COMERCIO", as_index=False)["COMISION"]
+                reporte.groupby(
+                    "COMERCIO",
+                    as_index=False
+                )["COMISION"]
                 .sum()
-                .sort_values("COMISION", ascending=False)
+                .sort_values(
+                    "COMISION",
+                    ascending=False
+                )
             )
 
             resumen_comercios["COMISION"] = (
@@ -347,12 +450,21 @@ if archivos:
 # ================= TODOS LOS MESES =================
 if archivos:
 
-    st.subheader("📦 Reporte detallado (todos los meses)")
+    st.subheader(
+        "📦 Reporte detallado (todos los meses)"
+    )
 
     df_full = df_original.copy()
 
-    pagos_full = df_full[df_full["tx_reference"].str.startswith("PY", na=False)].copy()
-    fees_full = df_full[df_full["tx_reference"].str.startswith("SF", na=False)].copy()
+    pagos_full = df_full[
+        df_full["tx_reference"]
+        .str.startswith("PY", na=False)
+    ].copy()
+
+    fees_full = df_full[
+        df_full["tx_reference"]
+        .str.startswith("SF", na=False)
+    ].copy()
 
     pagos_full.rename(
         columns={
@@ -371,7 +483,9 @@ if archivos:
     )
 
     detalle_full = pagos_full.merge(
-        fees_full[["psp_tin", "COMISION", "SF_operation_no"]],
+        fees_full[
+            ["psp_tin", "COMISION", "SF_operation_no"]
+        ],
         on="psp_tin",
         how="left"
     )
