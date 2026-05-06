@@ -8,117 +8,15 @@ st.set_page_config(page_title="Analizador Financiero Payin",layout="wide")
 
 st.markdown("""
 <style>
-
-/* Fondo */
-.stApp{
-background-color:#0f172a;
-}
-
-/* Contenedor */
-.block-container{
-padding-top:2rem;
-padding-bottom:2rem;
-max-width:1400px;
-}
-
-/* Titulo */
-h1{
-color:white !important;
-font-size:48px !important;
-font-weight:700 !important;
-}
-
-/* Subtitulos */
-h2,h3{
-color:white !important;
-}
-
-/* Textos */
-label,p,span{
-color:#e5e7eb !important;
-}
-
-/* Cards metrics */
+.block-container{padding-top:2rem;padding-bottom:2rem;}
 [data-testid="metric-container"]{
-background:linear-gradient(135deg,#111827,#1f2937);
-border:1px solid #374151;
-padding:18px;
-border-radius:18px;
-box-shadow:0 4px 15px rgba(0,0,0,0.25);
-}
-
-[data-testid="metric-container"] label{
-color:#9ca3af !important;
-font-size:14px;
-}
-
-[data-testid="metric-container"] div{
-color:white !important;
-}
-
-/* Dataframes */
-[data-testid="stDataFrame"]{
-border-radius:16px;
-overflow:hidden;
-border:1px solid #374151;
-}
-
-/* Selectbox */
-.stSelectbox div[data-baseweb="select"]{
 background-color:#111827;
+padding:15px;
 border-radius:12px;
 border:1px solid #374151;
 }
-
-/* Radio */
-.stRadio > div{
-background-color:#111827;
-padding:12px;
-border-radius:14px;
-border:1px solid #374151;
-}
-
-/* Botones */
-.stDownloadButton button,
-.stButton button{
-background:linear-gradient(135deg,#2563eb,#1d4ed8);
-color:white;
-border:none;
-border-radius:12px;
-padding:10px 18px;
-font-weight:600;
-transition:0.3s;
-}
-
-.stDownloadButton button:hover,
-.stButton button:hover{
-transform:scale(1.02);
-background:linear-gradient(135deg,#1d4ed8,#1e40af);
-}
-
-/* Inputs */
-.stNumberInput input{
-background-color:#111827 !important;
-color:white !important;
-border-radius:10px !important;
-}
-
-/* Success */
-.stSuccess{
-border-radius:14px;
-}
-
-/* Scroll */
-::-webkit-scrollbar{
-width:10px;
-height:10px;
-}
-
-::-webkit-scrollbar-thumb{
-background:#374151;
-border-radius:10px;
-}
-
+[data-testid="metric-container"] label{color:#9CA3AF;}
+[data-testid="metric-container"] div{color:white;}
 </style>
 """,unsafe_allow_html=True)
 
@@ -427,7 +325,8 @@ if archivos:
 
                 st.dataframe(
                     tabla.head(500),
-                    use_container_width=True
+                    use_container_width=True,
+                    height=500
                 )
 
                 st.download_button(
@@ -611,7 +510,8 @@ if archivos:
 
                 st.dataframe(
                     reporte.head(500),
-                    use_container_width=True
+                    use_container_width=True,
+                    height=500
                 )
 
                 st.download_button(
@@ -646,7 +546,8 @@ if archivos:
 
                 st.dataframe(
                     resumen_comercios.head(500),
-                    use_container_width=True
+                    use_container_width=True,
+                    height=400
                 )
 
                 st.download_button(
