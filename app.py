@@ -799,7 +799,7 @@ if archivos:
                         "COMISION": st.column_config.NumberColumn(
                             "COMISION",
                             format="%.2f",
-                            width="medium"
+                            width="large"
                         )
                     }
                 )
