@@ -30,9 +30,11 @@ st.markdown("""
 
 st.title("Analizador Financiero Payin")
 
-archivo = st.file_uploader(
-    "Sube tu archivo Excel, CSV o ZIP",
-    type=["xlsx", "csv", "zip"]
+# ================= SUBIR VARIOS ARCHIVOS =================
+archivos = st.file_uploader(
+    "Sube tus archivos Excel, CSV o ZIP",
+    type=["xlsx", "csv", "zip"],
+    accept_multiple_files=True
 )
 
 def exportar_csv(df):
@@ -84,14 +86,27 @@ def cargar_archivo(file):
         return pd.read_excel(file, engine="openpyxl")
 
 # ================= PROCESAR =================
-if archivo is not None:
+if archivos:
 
-    df = cargar_archivo(archivo)
-    df.columns = df.columns.str.lower().str.strip()
+    dfs = []
+
+    for archivo in archivos:
+
+        df_temp = cargar_archivo(archivo)
+
+        df_temp.columns = (
+            df_temp.columns
+            .str.lower()
+            .str.strip()
+        )
+
+        dfs.append(df_temp)
+
+    df = pd.concat(dfs, ignore_index=True)
 
     df_original = df.copy()
 
-    st.success("Archivo cargado correctamente")
+    st.success("Archivos cargados correctamente")
 
     df["tx_currency_code"] = df["tx_currency_code"].astype(str).str.upper()
     df["tx_reference"] = df["tx_reference"].astype(str).str.upper()
@@ -239,47 +254,17 @@ if archivo is not None:
 
             c1, c2, c3, c4 = st.columns(4)
 
-            c1.metric(
-                "💰 Recaudado",
-                f"{simbolo} {total_recaudo:,.2f}"
-            )
-
-            c2.metric(
-                "💸 Comisiones",
-                f"{simbolo} {total_comisiones:,.2f}"
-            )
-
-            c3.metric(
-                "🧾 Base",
-                f"{simbolo} {total_base:,.2f}"
-            )
-
-            c4.metric(
-                "🏛 IGV",
-                f"{simbolo} {total_igv:,.2f}"
-            )
+            c1.metric("💰 Recaudado", f"{simbolo} {total_recaudo:,.2f}")
+            c2.metric("💸 Comisiones", f"{simbolo} {total_comisiones:,.2f}")
+            c3.metric("🧾 Base", f"{simbolo} {total_base:,.2f}")
+            c4.metric("🏛 IGV", f"{simbolo} {total_igv:,.2f}")
 
             c5, c6, c7, c8 = st.columns(4)
 
-            c5.metric(
-                "📑 Final",
-                f"{simbolo} {total_final:,.2f}"
-            )
-
-            c6.metric(
-                "⚖️ Diferencia",
-                f"{simbolo} {total_diferencia:,.2f}"
-            )
-
-            c7.metric(
-                "🔢 Operaciones",
-                f"{operaciones:,}"
-            )
-
-            c8.metric(
-                "🧮 Neto",
-                f"{simbolo} {total_neto:,.2f}"
-            )
+            c5.metric("📑 Final", f"{simbolo} {total_final:,.2f}")
+            c6.metric("⚖️ Diferencia", f"{simbolo} {total_diferencia:,.2f}")
+            c7.metric("🔢 Operaciones", f"{operaciones:,}")
+            c8.metric("🧮 Neto", f"{simbolo} {total_neto:,.2f}")
 
         # ================= REPORTE DETALLADO =================
         if opcion_reporte in ["Reporte detallado", "Ambas"]:
@@ -335,8 +320,32 @@ if archivo is not None:
                 "reporte_detallado_mes.csv"
             )
 
+            # ================= TOTAL COMISIONES POR COMERCIO =================
+            st.divider()
+
+            st.subheader("🏪 Total de comisiones por comercio")
+
+            resumen_comercios = (
+                reporte.groupby("COMERCIO", as_index=False)["COMISION"]
+                .sum()
+                .sort_values("COMISION", ascending=False)
+            )
+
+            resumen_comercios["COMISION"] = (
+                resumen_comercios["COMISION"]
+                .round(2)
+            )
+
+            st.dataframe(resumen_comercios)
+
+            st.download_button(
+                "📥 Descargar resumen comercios",
+                exportar_csv(resumen_comercios),
+                "resumen_comercios.csv"
+            )
+
 # ================= TODOS LOS MESES =================
-if archivo is not None:
+if archivos:
 
     st.subheader("📦 Reporte detallado (todos los meses)")
 
