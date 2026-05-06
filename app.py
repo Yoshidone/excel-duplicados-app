@@ -8,19 +8,153 @@ st.set_page_config(page_title="Analizador Financiero Payin",layout="wide")
 
 st.markdown("""
 <style>
-.block-container{padding-top:2rem;padding-bottom:2rem;}
-[data-testid="metric-container"]{
-background-color:#111827;
-padding:15px;
-border-radius:12px;
-border:1px solid #374151;
+
+/* Fondo general */
+.stApp{
+background:#f5f7fb;
 }
-[data-testid="metric-container"] label{color:#9CA3AF;}
-[data-testid="metric-container"] div{color:white;}
+
+/* Contenedor */
+.block-container{
+padding-top:1.5rem;
+padding-bottom:2rem;
+max-width:1450px;
+}
+
+/* Header */
+h1{
+font-size:52px !important;
+font-weight:800 !important;
+color:#111827 !important;
+margin-bottom:5px;
+}
+
+h2,h3{
+color:#111827 !important;
+font-weight:700 !important;
+}
+
+/* Texto */
+label,p,span{
+color:#374151 !important;
+}
+
+/* Upload */
+[data-testid="stFileUploader"]{
+background:white;
+border:2px dashed #cbd5e1;
+padding:25px;
+border-radius:22px;
+box-shadow:0 4px 18px rgba(0,0,0,0.05);
+}
+
+/* Cards métricas */
+[data-testid="metric-container"]{
+background:white;
+border-radius:22px;
+padding:22px;
+border:1px solid #e5e7eb;
+box-shadow:0 4px 18px rgba(0,0,0,0.05);
+transition:0.3s;
+}
+
+[data-testid="metric-container"]:hover{
+transform:translateY(-2px);
+box-shadow:0 8px 24px rgba(0,0,0,0.08);
+}
+
+[data-testid="metric-container"] label{
+color:#6b7280 !important;
+font-size:14px;
+font-weight:600;
+}
+
+[data-testid="metric-container"] div{
+color:#111827 !important;
+font-weight:700;
+}
+
+/* Dataframes */
+[data-testid="stDataFrame"]{
+background:white;
+border-radius:20px;
+padding:10px;
+border:1px solid #e5e7eb;
+box-shadow:0 4px 18px rgba(0,0,0,0.05);
+overflow:hidden;
+}
+
+/* Selectbox */
+.stSelectbox div[data-baseweb="select"]{
+background:white;
+border-radius:16px;
+border:1px solid #d1d5db;
+min-height:48px;
+}
+
+/* Inputs */
+.stNumberInput input{
+background:white !important;
+border-radius:14px !important;
+border:1px solid #d1d5db !important;
+}
+
+/* Radio */
+.stRadio > div{
+background:white;
+padding:15px;
+border-radius:18px;
+border:1px solid #e5e7eb;
+box-shadow:0 4px 18px rgba(0,0,0,0.05);
+}
+
+/* Botones */
+.stDownloadButton button,
+.stButton button{
+background:linear-gradient(135deg,#2563eb,#3b82f6);
+color:white;
+border:none;
+padding:12px 22px;
+border-radius:14px;
+font-weight:700;
+transition:0.3s;
+}
+
+.stDownloadButton button:hover,
+.stButton button:hover{
+transform:scale(1.02);
+background:linear-gradient(135deg,#1d4ed8,#2563eb);
+}
+
+/* Success */
+.stSuccess{
+background:#ecfdf5;
+border-radius:18px;
+padding:15px;
+}
+
+/* Divider */
+hr{
+margin-top:2rem;
+margin-bottom:2rem;
+}
+
+/* Scroll */
+::-webkit-scrollbar{
+width:10px;
+height:10px;
+}
+
+::-webkit-scrollbar-thumb{
+background:#cbd5e1;
+border-radius:10px;
+}
+
 </style>
 """,unsafe_allow_html=True)
 
-st.title("Analizador Financiero Payin")
+st.title("💳 Analizador Financiero Payin")
+st.caption("Dashboard financiero y análisis de comisiones")
 
 # ================= SUBIR ARCHIVOS =================
 archivos=st.file_uploader(
@@ -61,12 +195,10 @@ def cargar_archivo(file):
 
     nombre=file.name.lower()
 
-    # ================= CSV =================
     if nombre.endswith(".csv"):
 
         return leer_csv_seguro(file)
 
-    # ================= ZIP =================
     elif nombre.endswith(".zip"):
 
         dfs_zip=[]
@@ -75,7 +207,6 @@ def cargar_archivo(file):
 
             for nombre_archivo in z.namelist():
 
-                # ================= CSV EN ZIP =================
                 if nombre_archivo.lower().endswith(".csv"):
 
                     with z.open(nombre_archivo) as f:
@@ -92,7 +223,6 @@ def cargar_archivo(file):
 
                         dfs_zip.append(df_zip)
 
-                # ================= EXCEL EN ZIP =================
                 elif nombre_archivo.lower().endswith((".xlsx",".xls")):
 
                     with z.open(nombre_archivo) as f:
@@ -115,7 +245,6 @@ def cargar_archivo(file):
 
         raise ValueError("ZIP sin CSV ni Excel")
 
-    # ================= EXCEL =================
     else:
 
         return pd.read_excel(
@@ -144,9 +273,9 @@ if archivos:
 
         df=pd.concat(dfs,ignore_index=True)
 
-        df_original=df.copy()
+        df_original=df
 
-        st.success("Archivo cargado correctamente")
+        st.success("✅ Archivo cargado correctamente")
 
         df["tx_currency_code"]=(
             df["tx_currency_code"]
@@ -154,7 +283,6 @@ if archivos:
             .str.upper()
         )
 
-        # ================= CORREGIR MONEDAS =================
         df["tx_currency_code"]=(
             df["tx_currency_code"]
             .replace({
@@ -170,7 +298,6 @@ if archivos:
             .str.upper()
         )
 
-        # ================= OPCION REPORTE =================
         st.divider()
 
         opcion_reporte=st.radio(
@@ -186,7 +313,6 @@ if archivos:
 
         if opcion_reporte:
 
-            # ================= FILTROS =================
             st.divider()
 
             col1,col2=st.columns(2)
@@ -202,12 +328,12 @@ if archivos:
             )
 
             mes_sel=col1.selectbox(
-                "Selecciona un mes",
+                "📅 Selecciona un mes",
                 sorted(df["mes"].dropna().unique())
             )
 
             moneda_sel=col2.selectbox(
-                "Selecciona moneda",
+                "💵 Selecciona moneda",
                 ["PEN","USD"]
             )
 
@@ -227,15 +353,17 @@ if archivos:
                 st.divider()
 
                 st.subheader(
-                    f"Comparación de comisiones ({moneda_sel})"
+                    f"💰 Comparación de comisiones ({moneda_sel})"
                 )
 
-                porcentaje=st.number_input(
+                col3,col4=st.columns(2)
+
+                porcentaje=col3.number_input(
                     "Porcentaje comisión (%)",
                     value=2.30
                 )
 
-                fee_fijo=st.number_input(
+                fee_fijo=col4.number_input(
                     f"Fee fijo ({simbolo})",
                     value=0.90
                 )
@@ -263,18 +391,14 @@ if archivos:
                     )
                 )
 
-                comisiones["tx_amount_pago"]=(
-                    pd.to_numeric(
-                        comisiones["tx_amount_pago"],
-                        errors="coerce"
-                    )
+                comisiones["tx_amount_pago"]=pd.to_numeric(
+                    comisiones["tx_amount_pago"],
+                    errors="coerce"
                 )
 
-                comisiones["tx_amount_comision"]=(
-                    pd.to_numeric(
-                        comisiones["tx_amount_comision"],
-                        errors="coerce"
-                    )
+                comisiones["tx_amount_comision"]=pd.to_numeric(
+                    comisiones["tx_amount_comision"],
+                    errors="coerce"
                 )
 
                 comisiones["comision_real"]=(
@@ -324,9 +448,8 @@ if archivos:
                 ].fillna(0)
 
                 st.dataframe(
-                    tabla.head(500),
-                    use_container_width=True,
-                    height=500
+                    tabla.head(100),
+                    use_container_width=True
                 )
 
                 st.download_button(
@@ -335,321 +458,27 @@ if archivos:
                     "comisiones.csv"
                 )
 
-                # ================= RESUMEN =================
                 st.subheader("📊 Resumen financiero")
 
                 total_recaudo=tabla["tx_amount_pago"].sum()
                 total_base=tabla["comision_base"].sum()
-
-                total_igv=round(
-                    total_base*0.18,
-                    2
-                )
-
-                total_final=round(
-                    total_base+total_igv,
-                    2
-                )
-
-                total_comisiones=round(
-                    tabla["comision_real"].sum(),
-                    2
-                )
-
-                total_neto=round(
-                    tabla["total_neto"].sum(),
-                    2
-                )
-
-                total_diferencia=round(
-                    total_comisiones-total_final,
-                    2
-                )
-
-                operaciones=(
-                    tabla["psp_tin"]
-                    .nunique()
-                )
+                total_igv=round(total_base*0.18,2)
+                total_final=round(total_base+total_igv,2)
+                total_comisiones=round(tabla["comision_real"].sum(),2)
+                total_neto=round(tabla["total_neto"].sum(),2)
+                total_diferencia=round(total_comisiones-total_final,2)
+                operaciones=tabla["psp_tin"].nunique()
 
                 c1,c2,c3,c4=st.columns(4)
 
-                c1.metric(
-                    "💰 Recaudado",
-                    f"{simbolo} {total_recaudo:,.2f}"
-                )
-
-                c2.metric(
-                    "💸 Comisiones",
-                    f"{simbolo} {total_comisiones:,.2f}"
-                )
-
-                c3.metric(
-                    "🧾 Base",
-                    f"{simbolo} {total_base:,.2f}"
-                )
-
-                c4.metric(
-                    "🏛 IGV",
-                    f"{simbolo} {total_igv:,.2f}"
-                )
+                c1.metric("💰 Recaudado",f"{simbolo} {total_recaudo:,.2f}")
+                c2.metric("💸 Comisiones",f"{simbolo} {total_comisiones:,.2f}")
+                c3.metric("🧾 Base",f"{simbolo} {total_base:,.2f}")
+                c4.metric("🏛 IGV",f"{simbolo} {total_igv:,.2f}")
 
                 c5,c6,c7,c8=st.columns(4)
 
-                c5.metric(
-                    "📑 Final",
-                    f"{simbolo} {total_final:,.2f}"
-                )
-
-                c6.metric(
-                    "⚖️ Diferencia",
-                    f"{simbolo} {total_diferencia:,.2f}"
-                )
-
-                c7.metric(
-                    "🔢 Operaciones",
-                    f"{operaciones:,}"
-                )
-
-                c8.metric(
-                    "🧮 Neto",
-                    f"{simbolo} {total_neto:,.2f}"
-                )
-
-            # ================= REPORTE DETALLADO =================
-            if opcion_reporte in [
-                "Reporte detallado",
-                "Ambas"
-            ]:
-
-                st.divider()
-
-                st.subheader(
-                    "📄 Reporte detallado (mes seleccionado)"
-                )
-
-                pagos=df[
-                    df["tx_reference"]
-                    .str.startswith("PY",na=False)
-                ].copy()
-
-                fees=df[
-                    df["tx_reference"]
-                    .str.startswith("SF",na=False)
-                ].copy()
-
-                pagos.rename(
-                    columns={
-                        "tx_amount":"RECAUDO",
-                        "tx_reference":"PY_operation_no"
-                    },
-                    inplace=True
-                )
-
-                fees.rename(
-                    columns={
-                        "tx_amount":"COMISION",
-                        "tx_reference":"SF_operation_no"
-                    },
-                    inplace=True
-                )
-
-                detalle=pagos.merge(
-                    fees[[
-                        "psp_tin",
-                        "COMISION",
-                        "SF_operation_no"
-                    ]],
-                    on="psp_tin",
-                    how="left"
-                )
-
-                reporte=pd.DataFrame({
-                    "FECHA":detalle.get(
-                        "x_create_date_gmt_peru",
-                        ""
-                    ),
-                    "COMERCIO":detalle.get(
-                        "com_nombre",
-                        ""
-                    ),
-                    "MONEDA":detalle.get(
-                        "tx_currency_code",
-                        ""
-                    ),
-                    "CLIENTE":detalle.get(
-                        "deb_nombre",
-                        ""
-                    ),
-                    "psp_tin":detalle["psp_tin"],
-                    "tipo":detalle.get(
-                        "tipo",
-                        ""
-                    ),
-                    "PY_operation_no":detalle[
-                        "PY_operation_no"
-                    ],
-                    "SF_operation_no":detalle[
-                        "SF_operation_no"
-                    ],
-                    "RECAUDO":detalle[
-                        "RECAUDO"
-                    ],
-                    "COMISION":(
-                        detalle["COMISION"]
-                        .abs()
-                    ),
-                    "SET_referencia":detalle.get(
-                        "set_referencia",
-                        ""
-                    ),
-                    "Fecha Transferencia":detalle.get(
-                        "fecha transferencia",
-                        ""
-                    )
-                }).fillna(0)
-
-                st.dataframe(
-                    reporte.head(500),
-                    use_container_width=True,
-                    height=500
-                )
-
-                st.download_button(
-                    "📥 Descargar reporte detallado (mes)",
-                    exportar_csv(reporte),
-                    "reporte_detallado_mes.csv"
-                )
-
-                # ================= TOTAL COMISIONES =================
-                st.divider()
-
-                st.subheader(
-                    "🏪 Total de comisiones por comercio"
-                )
-
-                resumen_comercios=(
-                    reporte.groupby(
-                        "COMERCIO",
-                        as_index=False
-                    )["COMISION"]
-                    .sum()
-                    .sort_values(
-                        "COMISION",
-                        ascending=False
-                    )
-                )
-
-                resumen_comercios["COMISION"]=(
-                    resumen_comercios["COMISION"]
-                    .round(2)
-                )
-
-                st.dataframe(
-                    resumen_comercios.head(500),
-                    use_container_width=True,
-                    height=400
-                )
-
-                st.download_button(
-                    "📥 Descargar total comisiones por comercio",
-                    exportar_csv(
-                        resumen_comercios
-                    ),
-                    "total_comisiones_comercio.csv"
-                )
-
-# ================= TODOS LOS MESES =================
-if archivos:
-
-    st.subheader(
-        "📦 Reporte detallado (todos los meses)"
-    )
-
-    df_full=df_original.copy()
-
-    pagos_full=df_full[
-        df_full["tx_reference"]
-        .str.startswith("PY",na=False)
-    ].copy()
-
-    fees_full=df_full[
-        df_full["tx_reference"]
-        .str.startswith("SF",na=False)
-    ].copy()
-
-    pagos_full.rename(
-        columns={
-            "tx_amount":"RECAUDO",
-            "tx_reference":"PY_operation_no"
-        },
-        inplace=True
-    )
-
-    fees_full.rename(
-        columns={
-            "tx_amount":"COMISION",
-            "tx_reference":"SF_operation_no"
-        },
-        inplace=True
-    )
-
-    detalle_full=pagos_full.merge(
-        fees_full[[
-            "psp_tin",
-            "COMISION",
-            "SF_operation_no"
-        ]],
-        on="psp_tin",
-        how="left"
-    )
-
-    reporte_full=pd.DataFrame({
-        "FECHA":detalle_full.get(
-            "x_create_date_gmt_peru",
-            ""
-        ),
-        "COMERCIO":detalle_full.get(
-            "com_nombre",
-            ""
-        ),
-        "MONEDA":detalle_full.get(
-            "tx_currency_code",
-            ""
-        ),
-        "CLIENTE":detalle_full.get(
-            "deb_nombre",
-            ""
-        ),
-        "psp_tin":detalle_full["psp_tin"],
-        "tipo":detalle_full.get(
-            "tipo",
-            ""
-        ),
-        "PY_operation_no":detalle_full[
-            "PY_operation_no"
-        ],
-        "SF_operation_no":detalle_full[
-            "SF_operation_no"
-        ],
-        "RECAUDO":detalle_full[
-            "RECAUDO"
-        ],
-        "COMISION":(
-            detalle_full["COMISION"]
-            .abs()
-        ),
-        "SET_referencia":detalle_full.get(
-            "set_referencia",
-            ""
-        ),
-        "Fecha Transferencia":detalle_full.get(
-            "fecha transferencia",
-            ""
-        )
-    }).fillna(0)
-
-    st.download_button(
-        "📥 Descargar reporte detallado (todos)",
-        exportar_csv(reporte_full),
-        "reporte_detallado_todos.csv"
-    )
+                c5.metric("📑 Final",f"{simbolo} {total_final:,.2f}")
+                c6.metric("⚖️ Diferencia",f"{simbolo} {total_diferencia:,.2f}")
+                c7.metric("🔢 Operaciones",f"{operaciones:,}")
+                c8.metric("🧮 Neto",f"{simbolo} {total_neto:,.2f}")
