@@ -4,7 +4,7 @@ import polars as pl
 import zipfile
 import io
 
-st.set_page_config(page_title="Analizador Financiero Payin",layout="wide")
+st.set_page_config(page_title="Analizador Financiero Payin", layout="wide")
 
 st.markdown("""
 <style>
@@ -158,13 +158,13 @@ border-radius:10px;
 }
 
 </style>
-""",unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.title("💳 Analizador Financiero Payin")
 st.caption("Dashboard financiero y análisis de comisiones")
 
 # ================= SUBIR ARCHIVOS =================
-archivos=st.file_uploader(
+archivos = st.file_uploader(
     "Sube tu archivo Excel, CSV o ZIP",
     type=["xlsx","csv","zip"],
     accept_multiple_files=True
@@ -183,7 +183,7 @@ def leer_csv_seguro(f):
 
             f.seek(0)
 
-            df=pl.read_csv(
+            df = pl.read_csv(
                 f,
                 separator=sep,
                 ignore_errors=True
@@ -200,32 +200,32 @@ def leer_csv_seguro(f):
 @st.cache_data
 def cargar_archivo(file):
 
-    nombre=file.name.lower()
+    nombre = file.name.lower()
 
-    # ================= CSV =================
+    # CSV
     if nombre.endswith(".csv"):
 
         return leer_csv_seguro(file)
 
-    # ================= ZIP =================
+    # ZIP
     elif nombre.endswith(".zip"):
 
-        dfs_zip=[]
+        dfs_zip = []
 
         with zipfile.ZipFile(file) as z:
 
             for nombre_archivo in z.namelist():
 
-                # ================= CSV EN ZIP =================
+                # CSV EN ZIP
                 if nombre_archivo.lower().endswith(".csv"):
 
                     with z.open(nombre_archivo) as f:
 
-                        df_zip=leer_csv_seguro(
+                        df_zip = leer_csv_seguro(
                             io.BytesIO(f.read())
                         )
 
-                        df_zip.columns=(
+                        df_zip.columns = (
                             df_zip.columns
                             .str.lower()
                             .str.strip()
@@ -233,17 +233,17 @@ def cargar_archivo(file):
 
                         dfs_zip.append(df_zip)
 
-                # ================= EXCEL EN ZIP =================
+                # EXCEL EN ZIP
                 elif nombre_archivo.lower().endswith((".xlsx",".xls")):
 
                     with z.open(nombre_archivo) as f:
 
-                        df_zip=pd.read_excel(
+                        df_zip = pd.read_excel(
                             io.BytesIO(f.read()),
                             engine="calamine"
                         )
 
-                        df_zip.columns=(
+                        df_zip.columns = (
                             df_zip.columns
                             .str.lower()
                             .str.strip()
@@ -252,11 +252,11 @@ def cargar_archivo(file):
                         dfs_zip.append(df_zip)
 
         if dfs_zip:
-            return pd.concat(dfs_zip,ignore_index=True)
+            return pd.concat(dfs_zip, ignore_index=True)
 
         raise ValueError("ZIP sin CSV ni Excel")
 
-    # ================= EXCEL =================
+    # EXCEL
     else:
 
         return pd.read_excel(
@@ -269,13 +269,13 @@ if archivos:
 
     with st.spinner("⏳ Procesando archivos grandes..."):
 
-        dfs=[]
+        dfs = []
 
         for archivo in archivos:
 
-            df_temp=cargar_archivo(archivo)
+            df_temp = cargar_archivo(archivo)
 
-            df_temp.columns=(
+            df_temp.columns = (
                 df_temp.columns
                 .str.lower()
                 .str.strip()
@@ -283,20 +283,21 @@ if archivos:
 
             dfs.append(df_temp)
 
-        df=pd.concat(dfs,ignore_index=True)
+        df = pd.concat(dfs, ignore_index=True)
 
-        df_original=df
+        # Optimización RAM
+        df_original = df
 
         st.success("✅ Archivo cargado correctamente")
 
-        df["tx_currency_code"]=(
+        df["tx_currency_code"] = (
             df["tx_currency_code"]
             .astype(str)
             .str.upper()
         )
 
-        # ================= CORREGIR MONEDAS =================
-        df["tx_currency_code"]=(
+        # Corregir monedas
+        df["tx_currency_code"] = (
             df["tx_currency_code"]
             .replace({
                 "BOLÍGRAFO":"PEN",
@@ -305,7 +306,7 @@ if archivos:
             })
         )
 
-        df["tx_reference"]=(
+        df["tx_reference"] = (
             df["tx_reference"]
             .astype(str)
             .str.upper()
@@ -314,7 +315,7 @@ if archivos:
         # ================= OPCION REPORTE =================
         st.divider()
 
-        opcion_reporte=st.radio(
+        opcion_reporte = st.radio(
             "Selecciona qué deseas visualizar:",
             [
                 "Comparación de comisiones",
@@ -330,34 +331,34 @@ if archivos:
             # ================= FILTROS =================
             st.divider()
 
-            col1,col2=st.columns(2)
+            col1, col2 = st.columns(2)
 
-            df["fecha"]=pd.to_datetime(
+            df["fecha"] = pd.to_datetime(
                 df["x_create_date_gmt_peru"],
                 errors="coerce"
             )
 
-            df["mes"]=(
+            df["mes"] = (
                 df["fecha"]
                 .dt.strftime("%Y-%m")
             )
 
-            mes_sel=col1.selectbox(
+            mes_sel = col1.selectbox(
                 "Selecciona un mes",
                 sorted(df["mes"].dropna().unique())
             )
 
-            moneda_sel=col2.selectbox(
+            moneda_sel = col2.selectbox(
                 "Selecciona moneda",
                 ["PEN","USD"]
             )
 
-            df=df[
-                (df["mes"]==mes_sel) &
-                (df["tx_currency_code"]==moneda_sel)
+            df = df[
+                (df["mes"] == mes_sel) &
+                (df["tx_currency_code"] == moneda_sel)
             ]
 
-            simbolo="S/" if moneda_sel=="PEN" else "$"
+            simbolo = "S/" if moneda_sel == "PEN" else "$"
 
             # ================= COMPARACION =================
             if opcion_reporte in [
@@ -371,31 +372,33 @@ if archivos:
                     f"Comparación de comisiones ({moneda_sel})"
                 )
 
-                porcentaje=st.number_input(
+                porcentaje = st.number_input(
                     "Porcentaje comisión (%)",
                     value=2.30
                 )
 
-                fee_fijo=st.number_input(
+                fee_fijo = st.number_input(
                     f"Fee fijo ({simbolo})",
                     value=0.90
                 )
 
-                pagos=df[
+                pagos = df[
                     df["tx_reference"]
-                    .str.startswith("PY",na=False)
+                    .str.startswith("PY", na=False)
                 ].copy()
 
-                fees=df[
+                fees = df[
                     df["tx_reference"]
-                    .str.startswith("SF",na=False)
+                    .str.startswith("SF", na=False)
                 ].copy()
 
-                comisiones=pagos.merge(
-                    fees[[
-                        "psp_tin",
-                        "tx_amount"
-                    ]],
+                comisiones = pagos.merge(
+                    fees[
+                        [
+                            "psp_tin",
+                            "tx_amount"
+                        ]
+                    ],
                     on="psp_tin",
                     how="left",
                     suffixes=(
@@ -404,54 +407,50 @@ if archivos:
                     )
                 )
 
-                comisiones["tx_amount_pago"]=(
-                    pd.to_numeric(
-                        comisiones["tx_amount_pago"],
-                        errors="coerce"
-                    )
+                comisiones["tx_amount_pago"] = pd.to_numeric(
+                    comisiones["tx_amount_pago"],
+                    errors="coerce"
                 )
 
-                comisiones["tx_amount_comision"]=(
-                    pd.to_numeric(
-                        comisiones["tx_amount_comision"],
-                        errors="coerce"
-                    )
+                comisiones["tx_amount_comision"] = pd.to_numeric(
+                    comisiones["tx_amount_comision"],
+                    errors="coerce"
                 )
 
-                comisiones["comision_real"]=(
+                comisiones["comision_real"] = (
                     comisiones["tx_amount_comision"]
                     .abs()
                 )
 
-                comisiones["comision_base"]=(
+                comisiones["comision_base"] = (
                     (
                         comisiones["tx_amount_pago"]
-                        *(porcentaje/100)
+                        * (porcentaje / 100)
                     )
-                    +fee_fijo
+                    + fee_fijo
                 )
 
-                comisiones["igv"]=(
+                comisiones["igv"] = (
                     comisiones["comision_base"]
-                    *0.18
+                    * 0.18
                 ).round(2)
 
-                comisiones["comision_final"]=(
+                comisiones["comision_final"] = (
                     comisiones["comision_base"]
-                    +comisiones["igv"]
+                    + comisiones["igv"]
                 ).round(2)
 
-                comisiones["diferencia"]=(
+                comisiones["diferencia"] = (
                     comisiones["comision_real"]
-                    -comisiones["comision_final"]
+                    - comisiones["comision_final"]
                 ).round(2)
 
-                comisiones["total_neto"]=(
+                comisiones["total_neto"] = (
                     comisiones["tx_amount_pago"]
-                    -comisiones["comision_real"]
+                    - comisiones["comision_real"]
                 ).round(2)
 
-                tabla=comisiones[
+                tabla = comisiones[
                     [
                         "psp_tin",
                         "tx_amount_pago",
@@ -465,7 +464,7 @@ if archivos:
                 ].fillna(0)
 
                 st.dataframe(
-                    tabla.head(500),
+                    tabla.head(100),
                     use_container_width=True
                 )
 
