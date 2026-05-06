@@ -4,19 +4,34 @@ import polars as pl
 import zipfile
 import io
 
-st.set_page_config(page_title="Analizador Financiero Payin",layout="wide")
+st.set_page_config(
+    page_title="Analizador Financiero Payin",
+    layout="wide"
+)
 
 st.markdown("""
 <style>
-.block-container{padding-top:2rem;padding-bottom:2rem;}
-[data-testid="metric-container"]{
-background-color:#111827;
-padding:15px;
-border-radius:12px;
-border:1px solid #374151;
+
+.block-container{
+    padding-top:2rem;
+    padding-bottom:2rem;
 }
-[data-testid="metric-container"] label{color:#9CA3AF;}
-[data-testid="metric-container"] div{color:white;}
+
+[data-testid="metric-container"]{
+    background-color:#111827;
+    padding:15px;
+    border-radius:12px;
+    border:1px solid #374151;
+}
+
+[data-testid="metric-container"] label{
+    color:#9CA3AF;
+}
+
+[data-testid="metric-container"] div{
+    color:white;
+}
+
 </style>
 """,unsafe_allow_html=True)
 
@@ -122,6 +137,11 @@ def cargar_archivo(file):
             file,
             engine="calamine"
         )
+
+# ================= ALTURA DINAMICA =================
+def altura_tabla(df,max_height=500):
+    filas=len(df)+1
+    return min(35*filas,max_height)
 
 # ================= PROCESAR =================
 if archivos:
@@ -323,10 +343,13 @@ if archivos:
                     ]
                 ].fillna(0)
 
+                tabla_preview=tabla.head(500)
+
                 st.dataframe(
-                    tabla.head(500),
+                    tabla_preview,
                     use_container_width=True,
-                    height=500
+                    hide_index=True,
+                    height=altura_tabla(tabla_preview)
                 )
 
                 st.download_button(
@@ -508,10 +531,13 @@ if archivos:
                     )
                 }).fillna(0)
 
+                reporte_preview=reporte.head(500)
+
                 st.dataframe(
-                    reporte.head(500),
+                    reporte_preview,
                     use_container_width=True,
-                    height=500
+                    hide_index=True,
+                    height=altura_tabla(reporte_preview)
                 )
 
                 st.download_button(
@@ -544,10 +570,13 @@ if archivos:
                     .round(2)
                 )
 
+                resumen_preview=resumen_comercios.head(500)
+
                 st.dataframe(
-                    resumen_comercios.head(500),
+                    resumen_preview,
                     use_container_width=True,
-                    height=400
+                    hide_index=True,
+                    height=altura_tabla(resumen_preview)
                 )
 
                 st.download_button(
