@@ -358,86 +358,89 @@ if archivos:
                     "comisiones.csv"
                 )
 
-                # ================= RESUMEN =================
-                st.subheader("📊 Resumen financiero")
+# ================= DASHBOARD COMPARACION =================
 
-                total_recaudo=tabla["tx_amount_pago"].sum()
-                total_base=tabla["comision_base"].sum()
+st.subheader(
+    "📊 Dashboard comparación de comisiones"
+)
 
-                total_igv=round(
-                    total_base*0.18,
-                    2
-                )
+total_recaudo = tabla["tx_amount_pago"].sum()
 
-                total_final=round(
-                    total_base+total_igv,
-                    2
-                )
+total_base = tabla["comision_base"].sum()
 
-                total_comisiones=round(
-                    tabla["comision_real"].sum(),
-                    2
-                )
+total_igv = round(
+    total_base * 0.18,
+    2
+)
 
-                total_neto=round(
-                    tabla["total_neto"].sum(),
-                    2
-                )
+total_final = round(
+    total_base + total_igv,
+    2
+)
 
-                total_diferencia=round(
-                    total_comisiones-total_final,
-                    2
-                )
+total_comisiones = round(
+    tabla["comision_real"].sum(),
+    2
+)
 
-                operaciones=(
-                    tabla["psp_tin"]
-                    .nunique()
-                )
+total_neto = round(
+    tabla["total_neto"].sum(),
+    2
+)
 
-                c1,c2,c3,c4=st.columns(4)
+total_diferencia = round(
+    total_comisiones - total_final,
+    2
+)
 
-                c1.metric(
-                    "💰 Recaudado",
-                    f"{simbolo} {total_recaudo:,.2f}"
-                )
+operaciones = (
+    tabla["psp_tin"]
+    .nunique()
+)
 
-                c2.metric(
-                    "💸 Comisiones",
-                    f"{simbolo} {total_comisiones:,.2f}"
-                )
+c1, c2, c3, c4 = st.columns(4)
 
-                c3.metric(
-                    "🧾 Base",
-                    f"{simbolo} {total_base:,.2f}"
-                )
+c1.metric(
+    "💰 Recaudado",
+    f"{simbolo} {total_recaudo:,.2f}"
+)
 
-                c4.metric(
-                    "🏛 IGV",
-                    f"{simbolo} {total_igv:,.2f}"
-                )
+c2.metric(
+    "💸 Comisiones",
+    f"{simbolo} {total_comisiones:,.2f}"
+)
 
-                c5,c6,c7,c8=st.columns(4)
+c3.metric(
+    "🧾 Base",
+    f"{simbolo} {total_base:,.2f}"
+)
 
-                c5.metric(
-                    "📑 Final",
-                    f"{simbolo} {total_final:,.2f}"
-                )
+c4.metric(
+    "🏛 IGV",
+    f"{simbolo} {total_igv:,.2f}"
+)
 
-                c6.metric(
-                    "⚖️ Diferencia",
-                    f"{simbolo} {total_diferencia:,.2f}"
-                )
+c5, c6, c7, c8 = st.columns(4)
 
-                c7.metric(
-                    "🔢 Operaciones",
-                    f"{operaciones:,}"
-                )
+c5.metric(
+    "📑 Final",
+    f"{simbolo} {total_final:,.2f}"
+)
 
-                c8.metric(
-                    "🧮 Neto",
-                    f"{simbolo} {total_neto:,.2f}"
-                )
+c6.metric(
+    "⚖️ Diferencia",
+    f"{simbolo} {total_diferencia:,.2f}"
+)
 
+c7.metric(
+    "🔢 Operaciones",
+    f"{operaciones:,}"
+)
+
+c8.metric(
+    "🧮 Neto",
+    f"{simbolo} {total_neto:,.2f}"
+)
             # ================= REPORTE DETALLADO =================
             if opcion_reporte in [
                 "Reporte detallado",
