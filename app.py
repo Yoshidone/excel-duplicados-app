@@ -441,154 +441,219 @@ c8.metric(
     "🧮 Neto",
     f"{simbolo} {total_neto:,.2f}"
 )
-            # ================= REPORTE DETALLADO =================
-            if opcion_reporte in [
-                "Reporte detallado",
-                "Ambas"
-            ]:
+          # ================= REPORTE DETALLADO =================
+if opcion_reporte in [
+    "Reporte detallado",
+    "Ambas"
+]:
 
-                st.divider()
+    st.divider()
 
-                st.subheader(
-                    "📄 Reporte detallado (mes seleccionado)"
-                )
+    st.subheader(
+        "📄 Reporte detallado (mes seleccionado)"
+    )
 
-                pagos=df[
-                    df["tx_reference"]
-                    .str.startswith("PY",na=False)
-                ].copy()
+    pagos = df[
+        df["tx_reference"]
+        .str.startswith("PY", na=False)
+    ].copy()
 
-                fees=df[
-                    df["tx_reference"]
-                    .str.startswith("SF",na=False)
-                ].copy()
+    fees = df[
+        df["tx_reference"]
+        .str.startswith("SF", na=False)
+    ].copy()
 
-                pagos.rename(
-                    columns={
-                        "tx_amount":"RECAUDO",
-                        "tx_reference":"PY_operation_no"
-                    },
-                    inplace=True
-                )
+    pagos.rename(
+        columns={
+            "tx_amount":"RECAUDO",
+            "tx_reference":"PY_operation_no"
+        },
+        inplace=True
+    )
 
-                fees.rename(
-                    columns={
-                        "tx_amount":"COMISION",
-                        "tx_reference":"SF_operation_no"
-                    },
-                    inplace=True
-                )
+    fees.rename(
+        columns={
+            "tx_amount":"COMISION",
+            "tx_reference":"SF_operation_no"
+        },
+        inplace=True
+    )
 
-                detalle=pagos.merge(
-                    fees[[
-                        "psp_tin",
-                        "COMISION",
-                        "SF_operation_no"
-                    ]],
-                    on="psp_tin",
-                    how="left"
-                )
+    detalle = pagos.merge(
+        fees[[
+            "psp_tin",
+            "COMISION",
+            "SF_operation_no"
+        ]],
+        on="psp_tin",
+        how="left"
+    )
 
-                reporte=pd.DataFrame({
-                    "FECHA":detalle.get(
-                        "x_create_date_gmt_peru",
-                        ""
-                    ),
-                    "COMERCIO":detalle.get(
-                        "com_nombre",
-                        ""
-                    ),
-                    "MONEDA":detalle.get(
-                        "tx_currency_code",
-                        ""
-                    ),
-                    "CLIENTE":detalle.get(
-                        "deb_nombre",
-                        ""
-                    ),
-                    "psp_tin":detalle["psp_tin"],
-                    "tipo":detalle.get(
-                        "tipo",
-                        ""
-                    ),
-                    "PY_operation_no":detalle[
-                        "PY_operation_no"
-                    ],
-                    "SF_operation_no":detalle[
-                        "SF_operation_no"
-                    ],
-                    "RECAUDO":detalle[
-                        "RECAUDO"
-                    ],
-                    "COMISION":(
-                        detalle["COMISION"]
-                        .abs()
-                    ),
-                    "SET_referencia":detalle.get(
-                        "set_referencia",
-                        ""
-                    ),
-                    "Fecha Transferencia":detalle.get(
-                        "fecha transferencia",
-                        ""
-                    )
-                }).fillna(0)
+    reporte = pd.DataFrame({
+        "FECHA":detalle.get(
+            "x_create_date_gmt_peru",
+            ""
+        ),
+        "COMERCIO":detalle.get(
+            "com_nombre",
+            ""
+        ),
+        "MONEDA":detalle.get(
+            "tx_currency_code",
+            ""
+        ),
+        "CLIENTE":detalle.get(
+            "deb_nombre",
+            ""
+        ),
+        "psp_tin":detalle["psp_tin"],
+        "tipo":detalle.get(
+            "tipo",
+            ""
+        ),
+        "PY_operation_no":detalle[
+            "PY_operation_no"
+        ],
+        "SF_operation_no":detalle[
+            "SF_operation_no"
+        ],
+        "RECAUDO":detalle[
+            "RECAUDO"
+        ],
+        "COMISION":(
+            detalle["COMISION"]
+            .abs()
+        ),
+        "SET_referencia":detalle.get(
+            "set_referencia",
+            ""
+        ),
+        "Fecha Transferencia":detalle.get(
+            "fecha transferencia",
+            ""
+        )
+    }).fillna(0)
 
-                reporte_preview=reporte.head(500)
+    reporte_preview = reporte.head(500)
 
-                st.dataframe(
-                    reporte_preview,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=altura_tabla(reporte_preview)
-                )
+    st.dataframe(
+        reporte_preview,
+        use_container_width=True,
+        hide_index=True,
+        height=altura_tabla(reporte_preview)
+    )
 
-                st.download_button(
-                    "📥 Descargar reporte detallado (mes)",
-                    exportar_csv(reporte),
-                    "reporte_detallado_mes.csv"
-                )
+    st.download_button(
+        "📥 Descargar reporte detallado (mes)",
+        exportar_csv(reporte),
+        "reporte_detallado_mes.csv"
+    )
 
-                # ================= TOTAL COMISIONES =================
-                st.divider()
+    # ================= DASHBOARD REPORTE DETALLADO =================
 
-                st.subheader(
-                    "🏪 Total de comisiones por comercio"
-                )
+    st.divider()
 
-                resumen_comercios=(
-                    reporte.groupby(
-                        "COMERCIO",
-                        as_index=False
-                    )["COMISION"]
-                    .sum()
-                    .sort_values(
-                        "COMISION",
-                        ascending=False
-                    )
-                )
+    st.subheader(
+        "📊 Dashboard reporte detallado"
+    )
 
-                resumen_comercios["COMISION"]=(
-                    resumen_comercios["COMISION"]
-                    .round(2)
-                )
+    total_recaudo_det = round(
+        reporte["RECAUDO"].sum(),
+        2
+    )
 
-                resumen_preview=resumen_comercios.head(500)
+    total_comision_det = round(
+        reporte["COMISION"].sum(),
+        2
+    )
 
-                st.dataframe(
-                    resumen_preview,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=altura_tabla(resumen_preview)
-                )
+    cantidad_operaciones_det = (
+        reporte["psp_tin"]
+        .nunique()
+    )
 
-                st.download_button(
-                    "📥 Descargar total comisiones por comercio",
-                    exportar_csv(
-                        resumen_comercios
-                    ),
-                    "total_comisiones_comercio.csv"
-                )
+    ticket_promedio = round(
+        total_recaudo_det /
+        cantidad_operaciones_det,
+        2
+    ) if cantidad_operaciones_det > 0 else 0
+
+    neto_det = round(
+        total_recaudo_det -
+        total_comision_det,
+        2
+    )
+
+    d1, d2, d3, d4 = st.columns(4)
+
+    d1.metric(
+        "💰 Recaudo total",
+        f"{simbolo} {total_recaudo_det:,.2f}"
+    )
+
+    d2.metric(
+        "💸 Comisión total",
+        f"{simbolo} {total_comision_det:,.2f}"
+    )
+
+    d3.metric(
+        "🔢 Operaciones",
+        f"{cantidad_operaciones_det:,}"
+    )
+
+    d4.metric(
+        "🧾 Ticket promedio",
+        f"{simbolo} {ticket_promedio:,.2f}"
+    )
+
+    d5 = st.columns(1)[0]
+
+    d5.metric(
+        "🧮 Neto",
+        f"{simbolo} {neto_det:,.2f}"
+    )
+
+    # ================= TOTAL COMISIONES =================
+
+    st.divider()
+
+    st.subheader(
+        "🏪 Total de comisiones por comercio"
+    )
+
+    resumen_comercios = (
+        reporte.groupby(
+            "COMERCIO",
+            as_index=False
+        )["COMISION"]
+        .sum()
+        .sort_values(
+            "COMISION",
+            ascending=False
+        )
+    )
+
+    resumen_comercios["COMISION"] = (
+        resumen_comercios["COMISION"]
+        .round(2)
+    )
+
+    resumen_preview = resumen_comercios.head(500)
+
+    st.dataframe(
+        resumen_preview,
+        use_container_width=True,
+        hide_index=True,
+        height=altura_tabla(resumen_preview)
+    )
+
+    st.download_button(
+        "📥 Descargar total comisiones por comercio",
+        exportar_csv(
+            resumen_comercios
+        ),
+        "total_comisiones_comercio.csv"
+    )
 
 # ================= TODOS LOS MESES =================
 if archivos:
