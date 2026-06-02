@@ -1,6 +1,6 @@
 import streamlit as st
-import pandas as pd
 import polars as pl
+import pandas as pd
 import zipfile
 import io
 import gc
@@ -37,65 +37,158 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("💳 Analizador Financiero Payin")
-st.caption("v1.0 · Payin Analytics")
+st.caption("v2.0 · Payin Analytics — optimizado para archivos grandes")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HELPERS
+# HELPERS — todo en Polars para mínimo uso de RAM
 # ─────────────────────────────────────────────────────────────────────────────
-def exportar_csv(df):
-    return df.to_csv(index=False).encode("utf-8")
 
-def altura_tabla(df, max_height=500):
-    return min(35 * (len(df) + 1), max_height)
+def exportar_csv(df_pd: pd.DataFrame) -> bytes:
+    return df_pd.to_csv(index=False).encode("utf-8")
 
-def leer_csv_seguro(f):
+def altura_tabla(n_filas: int, max_height: int = 500) -> int:
+    return min(35 * (n_filas + 1), max_height)
+
+def leer_csv_seguro(f) -> pl.DataFrame:
+    """Lee CSV en Polars (más rápido y consume menos RAM que pandas)."""
     for sep in [",", ";"]:
         try:
             f.seek(0)
-            return pl.read_csv(f, separator=sep, ignore_errors=True).to_pandas()
+            return pl.read_csv(f, separator=sep, ignore_errors=True, infer_schema_length=1000)
         except Exception:
             continue
     raise ValueError("No se pudo leer el CSV")
 
-@st.cache_data(show_spinner=False, max_entries=3, ttl=3600)
-def cargar_archivo(file):
-    nombre = file.name.lower()
+def normalizar_columnas(df: pl.DataFrame) -> pl.DataFrame:
+    return df.rename({c: c.strip().lower() for c in df.columns})
+
+@st.cache_data(show_spinner=False, max_entries=2, ttl=1800)
+def cargar_y_procesar(file_bytes: bytes, file_name: str) -> bytes:
+    """
+    Carga el archivo, normaliza columnas y devuelve bytes CSV comprimido.
+    Se guarda como CSV en caché para no mantener DataFrames en memoria.
+    """
+    nombre = file_name.lower()
+    dfs = []
+
     if nombre.endswith(".csv"):
-        return leer_csv_seguro(file)
-    if nombre.endswith(".zip"):
-        dfs_zip = []
-        with zipfile.ZipFile(file) as z:
+        df = leer_csv_seguro(io.BytesIO(file_bytes))
+        dfs.append(normalizar_columnas(df))
+
+    elif nombre.endswith(".zip"):
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
             for n in z.namelist():
                 with z.open(n) as f:
-                    contenido = io.BytesIO(f.read())
+                    contenido = f.read()
                     if n.lower().endswith(".csv"):
-                        df_zip = leer_csv_seguro(contenido)
+                        df = leer_csv_seguro(io.BytesIO(contenido))
                     elif n.lower().endswith((".xlsx", ".xls")):
-                        df_zip = pd.read_excel(contenido, engine="calamine")
+                        df_pd = pd.read_excel(io.BytesIO(contenido), engine="calamine")
+                        df    = pl.from_pandas(df_pd)
+                        del df_pd
                     else:
                         continue
-                    df_zip.columns = df_zip.columns.str.lower().str.strip()
-                    dfs_zip.append(df_zip)
-        if dfs_zip:
-            return pd.concat(dfs_zip, ignore_index=True)
-        raise ValueError("ZIP sin archivos válidos")
-    return pd.read_excel(file, engine="calamine")
+                    dfs.append(normalizar_columnas(df))
+                    del df
 
-def construir_reporte(detalle):
-    return pd.DataFrame({
-        "FECHA":               detalle.get("x_create_date_gmt_peru", ""),
-        "COMERCIO":            detalle.get("com_nombre",              ""),
-        "MONEDA":              detalle.get("tx_currency_code",        ""),
-        "CLIENTE":             detalle.get("deb_nombre",              ""),
-        "psp_tin":             detalle["psp_tin"],
-        "tipo":                detalle.get("tipo",                    ""),
-        "PY_operation_no":     detalle["PY_operation_no"],
-        "SF_operation_no":     detalle["SF_operation_no"],
-        "RECAUDO":             detalle["RECAUDO"],
-        "COMISION":            detalle["COMISION"].abs(),
-        "SET_referencia":      detalle.get("set_referencia",          ""),
-        "Fecha Transferencia": detalle.get("fecha transferencia",     ""),
-    }).fillna(0)
+    else:  # Excel
+        df_pd = pd.read_excel(io.BytesIO(file_bytes), engine="calamine")
+        dfs.append(normalizar_columnas(pl.from_pandas(df_pd)))
+        del df_pd
+
+    if not dfs:
+        raise ValueError("Sin datos válidos")
+
+    resultado = pl.concat(dfs, how="diagonal")
+    del dfs; gc.collect()
+
+    # Devolver como CSV bytes — ocupa mucho menos RAM en caché que un DataFrame
+    return resultado.write_csv().encode("utf-8")
+
+
+def cargar_df(archivos) -> pl.DataFrame:
+    """Carga todos los archivos y los une en un solo DataFrame Polars."""
+    dfs, errores = [], []
+    for archivo in archivos:
+        try:
+            csv_bytes = cargar_y_procesar(archivo.read(), archivo.name)
+            df        = pl.read_csv(io.BytesIO(csv_bytes), ignore_errors=True, infer_schema_length=500)
+            dfs.append(df)
+        except Exception as e:
+            errores.append(f"{archivo.name}: {e}")
+
+    if errores:
+        st.warning("Errores al cargar:\n" + "\n".join(errores))
+    if not dfs:
+        st.error("❌ No se pudo cargar ningún archivo.")
+        st.stop()
+
+    resultado = pl.concat(dfs, how="diagonal")
+    del dfs; gc.collect()
+    return resultado
+
+
+def normalizar_base(df: pl.DataFrame) -> pl.DataFrame:
+    """Limpia monedas, referencias y genera columna mes."""
+
+    # Corregir nombres de moneda
+    df = df.with_columns(
+        pl.col("tx_currency_code")
+        .cast(pl.Utf8)
+        .str.to_uppercase()
+        .str.replace("BOLÍGRAFO",            "PEN")
+        .str.replace("DÓLAR ESTADOUNIDENSE", "USD")
+        .str.replace("DOLAR ESTADOUNIDENSE", "USD")
+        .alias("tx_currency_code")
+    )
+
+    df = df.with_columns(
+        pl.col("tx_reference").cast(pl.Utf8).str.to_uppercase().alias("tx_reference")
+    )
+
+    # Parsear fecha y extraer mes
+    df = df.with_columns(
+        pl.col("x_create_date_gmt_peru")
+        .str.to_datetime(strict=False)
+        .alias("fecha")
+    )
+
+    df = df.with_columns(
+        pl.col("fecha").dt.strftime("%Y-%m").alias("mes")
+    )
+
+    return df
+
+
+def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFrame:
+    """Merge pagos + fees en Polars y devuelve el reporte estructurado."""
+
+    pagos = pagos.rename({"tx_amount": "RECAUDO", "tx_reference": "PY_operation_no"})
+    fees  = fees.rename( {"tx_amount": "COMISION","tx_reference": "SF_operation_no"})
+
+    fees_sel = fees.select(["psp_tin", "COMISION", "SF_operation_no"])
+
+    detalle = pagos.join(fees_sel, on="psp_tin", how="left")
+
+    # Columnas opcionales — si no existen se crean vacías
+    def get_col(df, col):
+        return pl.col(col) if col in df.columns else pl.lit("").alias(col)
+
+    return detalle.select([
+        get_col(detalle, "x_create_date_gmt_peru").alias("FECHA"),
+        get_col(detalle, "com_nombre").alias("COMERCIO"),
+        get_col(detalle, "tx_currency_code").alias("MONEDA"),
+        get_col(detalle, "deb_nombre").alias("CLIENTE"),
+        pl.col("psp_tin"),
+        get_col(detalle, "tipo").alias("tipo"),
+        pl.col("PY_operation_no"),
+        pl.col("SF_operation_no"),
+        pl.col("RECAUDO").cast(pl.Float64).fill_null(0),
+        pl.col("COMISION").cast(pl.Float64).abs().fill_null(0),
+        get_col(detalle, "set_referencia").alias("SET_referencia"),
+        get_col(detalle, "fecha transferencia").alias("Fecha_Transferencia"),
+    ])
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PASO 1 — SUBIR ARCHIVOS
@@ -112,26 +205,10 @@ if not archivos:
     st.stop()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 2 — CARGAR Y VALIDAR
+# PASO 2 — CARGAR
 # ─────────────────────────────────────────────────────────────────────────────
-with st.spinner("⏳ Procesando..."):
-    dfs, errores = [], []
-    for archivo in archivos:
-        try:
-            tmp = cargar_archivo(archivo)
-            tmp.columns = tmp.columns.str.lower().str.strip()
-            dfs.append(tmp)
-        except Exception as e:
-            errores.append(f"{archivo.name}: {e}")
-
-    if errores:
-        st.warning("Errores al cargar:\n" + "\n".join(errores))
-    if not dfs:
-        st.error("❌ No se pudo cargar ningún archivo.")
-        st.stop()
-
-    df_base = pd.concat(dfs, ignore_index=True)
-    del dfs; gc.collect()
+with st.spinner("⏳ Cargando archivos..."):
+    df_base = cargar_df(archivos)
 
 requeridas = {"tx_currency_code", "tx_reference", "psp_tin", "tx_amount", "x_create_date_gmt_peru"}
 faltantes  = requeridas - set(df_base.columns)
@@ -139,46 +216,52 @@ if faltantes:
     st.error(f"⚠️ Columnas faltantes: {', '.join(sorted(faltantes))}")
     st.stop()
 
+with st.spinner("⚙️ Normalizando datos..."):
+    df_base = normalizar_base(df_base)
+    # Mantener solo columnas necesarias → menos RAM
+    cols_utiles = [c for c in [
+        "tx_currency_code","tx_reference","psp_tin","tx_amount",
+        "x_create_date_gmt_peru","fecha","mes",
+        "com_nombre","deb_nombre","tipo","set_referencia",
+        "fecha transferencia",
+    ] if c in df_base.columns]
+    df_base = df_base.select(cols_utiles)
+    gc.collect()
+
 st.success(f"✅ {len(df_base):,} filas · {len(df_base.columns)} columnas")
 
-df_base["tx_currency_code"] = (
-    df_base["tx_currency_code"].astype(str).str.upper()
-    .replace({"BOLÍGRAFO": "PEN", "DÓLAR ESTADOUNIDENSE": "USD", "DOLAR ESTADOUNIDENSE": "USD"})
-)
-df_base["tx_reference"] = df_base["tx_reference"].astype(str).str.upper()
-df_base["fecha"]        = pd.to_datetime(df_base["x_create_date_gmt_peru"], errors="coerce")
-df_base["mes"]          = df_base["fecha"].dt.strftime("%Y-%m")
-
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 3 — FILTROS (siempre visibles, sin condicionales anidados)
+# PASO 3 — FILTROS
 # ─────────────────────────────────────────────────────────────────────────────
 st.divider()
 
-meses = sorted(df_base["mes"].dropna().unique())
+meses = sorted(df_base["mes"].drop_nulls().unique().to_list())
 if not meses:
     st.error("❌ No hay fechas válidas en el archivo.")
     st.stop()
 
 col1, col2, col3 = st.columns(3)
-mes_sel      = col1.selectbox("📅 Mes",     meses,          key="sel_mes")
-moneda_sel   = col2.selectbox("💱 Moneda",  ["PEN", "USD"], key="sel_moneda")
-opcion       = col3.selectbox(
-    "📋 Reporte",
-    ["Comparación de comisiones", "Reporte detallado", "Ambas"],
-    key="sel_reporte",
-)
+mes_sel    = col1.selectbox("📅 Mes",    meses,          key="sel_mes")
+moneda_sel = col2.selectbox("💱 Moneda", ["PEN", "USD"], key="sel_moneda")
+opcion     = col3.selectbox("📋 Reporte",
+    ["Comparación de comisiones", "Reporte detallado", "Ambas"], key="sel_reporte")
 simbolo = "S/" if moneda_sel == "PEN" else "$"
 
-df_mes = df_base[
-    (df_base["mes"] == mes_sel) &
-    (df_base["tx_currency_code"] == moneda_sel)
-].copy()
+# Filtrar en Polars (rápido, sin copiar a pandas)
+df_mes = df_base.filter(
+    (pl.col("mes") == mes_sel) &
+    (pl.col("tx_currency_code") == moneda_sel)
+)
 
 st.caption(f"Registros filtrados: **{len(df_mes):,}**")
 
-if df_mes.empty:
+if len(df_mes) == 0:
     st.warning("⚠️ No hay datos para ese mes y moneda.")
     st.stop()
+
+# Separar pagos y fees una sola vez (se reutilizan abajo)
+pagos_df = df_mes.filter(pl.col("tx_reference").str.starts_with("PY"))
+fees_df  = df_mes.filter(pl.col("tx_reference").str.starts_with("SF"))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PASO 4A — COMPARACIÓN DE COMISIONES
@@ -192,40 +275,57 @@ if opcion in ["Comparación de comisiones", "Ambas"]:
     porcentaje = col_p.number_input("Porcentaje comisión (%)", value=2.30, min_value=0.0, step=0.01, key="pct")
     fee_fijo   = col_f.number_input(f"Fee fijo ({simbolo})",  value=0.90, min_value=0.0, step=0.01, key="fee")
 
-    pagos_c = df_mes[df_mes["tx_reference"].str.startswith("PY", na=False)].copy()
-    fees_c  = df_mes[df_mes["tx_reference"].str.startswith("SF", na=False)].copy()
-
-    if pagos_c.empty:
+    if len(pagos_df) == 0:
         st.warning("⚠️ No hay pagos PY en este período.")
     else:
-        com = pagos_c.merge(fees_c[["psp_tin", "tx_amount"]], on="psp_tin", how="left", suffixes=("_pago", "_comision"))
-        com["tx_amount_pago"]     = pd.to_numeric(com["tx_amount_pago"],     errors="coerce")
-        com["tx_amount_comision"] = pd.to_numeric(com["tx_amount_comision"], errors="coerce")
-        com["comision_real"]      = com["tx_amount_comision"].abs()
-        com["comision_base"]      = (com["tx_amount_pago"] * (porcentaje / 100) + fee_fijo).round(2)
-        com["igv"]                = (com["comision_base"] * 0.18).round(2)
-        com["comision_final"]     = (com["comision_base"] + com["igv"]).round(2)
-        com["diferencia"]         = (com["comision_real"] - com["comision_final"]).round(2)
-        com["total_neto"]         = (com["tx_amount_pago"] - com["comision_real"]).round(2)
+        # Merge en Polars
+        fees_sel = fees_df.select(["psp_tin", "tx_amount"]).rename({"tx_amount": "tx_amount_comision"})
+        com = pagos_df.rename({"tx_amount": "tx_amount_pago"}).join(fees_sel, on="psp_tin", how="left")
 
-        tabla = com[["psp_tin","tx_amount_pago","comision_real","comision_base","igv","comision_final","diferencia","total_neto"]].fillna(0)
+        com = com.with_columns([
+            pl.col("tx_amount_pago").cast(pl.Float64).fill_null(0),
+            pl.col("tx_amount_comision").cast(pl.Float64).fill_null(0),
+        ])
+        com = com.with_columns([
+            pl.col("tx_amount_comision").abs().alias("comision_real"),
+            (pl.col("tx_amount_pago") * (porcentaje / 100) + fee_fijo).round(2).alias("comision_base"),
+        ])
+        com = com.with_columns([
+            (pl.col("comision_base") * 0.18).round(2).alias("igv"),
+        ])
+        com = com.with_columns([
+            (pl.col("comision_base") + pl.col("igv")).round(2).alias("comision_final"),
+            (pl.col("comision_real") - (pl.col("comision_base") + (pl.col("comision_base") * 0.18))).round(2).alias("diferencia"),
+            (pl.col("tx_amount_pago") - pl.col("tx_amount_comision").abs()).round(2).alias("total_neto"),
+        ])
 
-        if len(tabla) > 500:
-            st.info(f"ℹ️ Mostrando 500 de {len(tabla):,} filas. Descarga el CSV para ver todas.")
-        st.dataframe(tabla.head(500), use_container_width=True, hide_index=True, height=altura_tabla(tabla.head(500)))
-        st.download_button("📥 Descargar comparación CSV", exportar_csv(tabla), "comisiones.csv", mime="text/csv", key="dl_com")
+        tabla_pl = com.select(["psp_tin","tx_amount_pago","comision_real",
+                               "comision_base","igv","comision_final","diferencia","total_neto"])
 
-        # Dashboard
+        # Convertir a pandas SOLO para mostrar (500 filas máximo)
+        tabla_preview = tabla_pl.head(500).to_pandas()
+
+        if len(tabla_pl) > 500:
+            st.info(f"ℹ️ Mostrando 500 de {len(tabla_pl):,} filas.")
+        st.dataframe(tabla_preview, use_container_width=True, hide_index=True, height=altura_tabla(len(tabla_preview)))
+
+        # Descargar: convertir completo a pandas solo cuando el usuario hace clic
+        csv_com = tabla_pl.write_csv().encode("utf-8")
+        st.download_button("📥 Descargar comparación CSV", csv_com, "comisiones.csv", mime="text/csv", key="dl_com")
+        del tabla_preview; gc.collect()
+
+        # Dashboard — calcular desde Polars directamente
+        tr  = round(tabla_pl["tx_amount_pago"].sum(),  2)
+        tb  = round(tabla_pl["comision_base"].sum(),   2)
+        tig = round(tb * 0.18,                         2)
+        tf  = round(tb + tig,                          2)
+        tc  = round(tabla_pl["comision_real"].sum(),   2)
+        tn  = round(tabla_pl["total_neto"].sum(),      2)
+        td  = round(tc - tf,                           2)
+        ops = tabla_pl["psp_tin"].n_unique()
+        del tabla_pl; gc.collect()
+
         st.subheader("📊 Dashboard comparación")
-        tr  = round(tabla["tx_amount_pago"].sum(),  2)
-        tb  = round(tabla["comision_base"].sum(),   2)
-        tig = round(tb * 0.18,                      2)
-        tf  = round(tb + tig,                       2)
-        tc  = round(tabla["comision_real"].sum(),   2)
-        tn  = round(tabla["total_neto"].sum(),      2)
-        td  = round(tc - tf,                        2)
-        ops = tabla["psp_tin"].nunique()
-
         r1c1, r1c2, r1c3, r1c4 = st.columns(4)
         r1c1.metric("💰 Recaudado",  f"{simbolo} {tr:,.2f}")
         r1c2.metric("💸 Comisiones", f"{simbolo} {tc:,.2f}")
@@ -246,65 +346,66 @@ if opcion in ["Reporte detallado", "Ambas"]:
     st.divider()
     st.subheader(f"📄 Reporte detallado — {moneda_sel} · {mes_sel}")
 
-    pagos_d = df_mes[df_mes["tx_reference"].str.startswith("PY", na=False)].copy()
-    fees_d  = df_mes[df_mes["tx_reference"].str.startswith("SF", na=False)].copy()
+    if len(pagos_df) == 0:
+        st.warning("⚠️ No hay pagos PY en este período.")
+    else:
+        reporte_pl = construir_reporte_pl(pagos_df.clone(), fees_df.clone())
 
-    pagos_d.rename(columns={"tx_amount": "RECAUDO",  "tx_reference": "PY_operation_no"}, inplace=True)
-    fees_d.rename( columns={"tx_amount": "COMISION", "tx_reference": "SF_operation_no"}, inplace=True)
+        reporte_preview = reporte_pl.head(500).to_pandas()
+        if len(reporte_pl) > 500:
+            st.info(f"ℹ️ Mostrando 500 de {len(reporte_pl):,} filas.")
+        st.dataframe(reporte_preview, use_container_width=True, hide_index=True, height=altura_tabla(len(reporte_preview)))
 
-    detalle = pagos_d.merge(fees_d[["psp_tin","COMISION","SF_operation_no"]], on="psp_tin", how="left")
-    reporte = construir_reporte(detalle)
+        csv_rep = reporte_pl.write_csv().encode("utf-8")
+        st.download_button("📥 Descargar reporte mes CSV", csv_rep, "reporte_mes.csv", mime="text/csv", key="dl_rep_mes")
+        del reporte_preview; gc.collect()
 
-    if len(reporte) > 500:
-        st.info(f"ℹ️ Mostrando 500 de {len(reporte):,} filas.")
-    st.dataframe(reporte.head(500), use_container_width=True, hide_index=True, height=altura_tabla(reporte.head(500)))
-    st.download_button("📥 Descargar reporte mes CSV", exportar_csv(reporte), "reporte_mes.csv", mime="text/csv", key="dl_rep_mes")
+        # Dashboard detallado
+        st.divider()
+        st.subheader("📊 Dashboard reporte detallado")
 
-    # Dashboard detallado
-    st.divider()
-    st.subheader("📊 Dashboard reporte detallado")
+        dtr  = round(reporte_pl["RECAUDO"].sum(),  2)
+        dtc  = round(reporte_pl["COMISION"].sum(), 2)
+        dops = reporte_pl["psp_tin"].n_unique()
+        dnet = round(dtr - dtc, 2)
+        dtkt = round(dtr / dops, 2) if dops > 0 else 0
 
-    dtr  = round(reporte["RECAUDO"].sum(),  2)
-    dtc  = round(reporte["COMISION"].sum(), 2)
-    dops = reporte["psp_tin"].nunique()
-    dnet = round(dtr - dtc, 2)
-    dtkt = round(dtr / dops, 2) if dops > 0 else 0
+        da1, da2, da3, da4 = st.columns(4)
+        da1.metric("💰 Recaudo total",   f"{simbolo} {dtr:,.2f}")
+        da2.metric("💸 Comisión total",  f"{simbolo} {dtc:,.2f}")
+        da3.metric("🔢 Operaciones",     f"{dops:,}")
+        da4.metric("🧾 Ticket promedio", f"{simbolo} {dtkt:,.2f}")
 
-    da1, da2, da3, da4 = st.columns(4)
-    da1.metric("💰 Recaudo total",   f"{simbolo} {dtr:,.2f}")
-    da2.metric("💸 Comisión total",  f"{simbolo} {dtc:,.2f}")
-    da3.metric("🔢 Operaciones",     f"{dops:,}")
-    da4.metric("🧾 Ticket promedio", f"{simbolo} {dtkt:,.2f}")
+        da5, da6, da7, da8 = st.columns(4)
+        da5.metric("🧮 Neto", f"{simbolo} {dnet:,.2f}")
+        da6.metric("", ""); da7.metric("", ""); da8.metric("", "")
 
-    da5, da6, da7, da8 = st.columns(4)
-    da5.metric("🧮 Neto", f"{simbolo} {dnet:,.2f}")
-    da6.metric("", "")
-    da7.metric("", "")
-    da8.metric("", "")
+        # Comisiones por comercio
+        st.divider()
+        st.subheader("🏪 Comisiones por comercio")
+        res_com = (
+            reporte_pl
+            .group_by("COMERCIO")
+            .agg(pl.col("COMISION").sum().round(2))
+            .sort("COMISION", descending=True)
+        )
+        st.dataframe(res_com.head(500).to_pandas(), use_container_width=True, hide_index=True, height=altura_tabla(min(len(res_com), 500)))
 
-    # Comisiones por comercio
-    st.divider()
-    st.subheader("🏪 Comisiones por comercio")
-    res_com = (
-        reporte.groupby("COMERCIO", as_index=False)["COMISION"]
-        .sum().sort_values("COMISION", ascending=False)
-    )
-    res_com["COMISION"] = res_com["COMISION"].round(2)
-    st.dataframe(res_com.head(500), use_container_width=True, hide_index=True, height=altura_tabla(res_com.head(500)))
-    st.download_button("📥 Descargar comisiones por comercio", exportar_csv(res_com), "comercios.csv", mime="text/csv", key="dl_com_comercio")
+        csv_res = res_com.write_csv().encode("utf-8")
+        st.download_button("📥 Descargar comisiones por comercio", csv_res, "comercios.csv", mime="text/csv", key="dl_comercio")
+        del reporte_pl, res_com; gc.collect()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 5 — REPORTE TODOS LOS MESES (siempre visible)
+# PASO 5 — REPORTE TODOS LOS MESES
 # ─────────────────────────────────────────────────────────────────────────────
 st.divider()
 st.subheader("📦 Reporte detallado (todos los meses)")
 
-pf = df_base[df_base["tx_reference"].str.startswith("PY", na=False)].copy()
-ff = df_base[df_base["tx_reference"].str.startswith("SF", na=False)].copy()
-pf.rename(columns={"tx_amount": "RECAUDO",  "tx_reference": "PY_operation_no"}, inplace=True)
-ff.rename( columns={"tx_amount": "COMISION", "tx_reference": "SF_operation_no"}, inplace=True)
-det_full     = pf.merge(ff[["psp_tin","COMISION","SF_operation_no"]], on="psp_tin", how="left")
-reporte_full = construir_reporte(det_full)
+pf = df_base.filter(pl.col("tx_reference").str.starts_with("PY"))
+ff = df_base.filter(pl.col("tx_reference").str.starts_with("SF"))
+reporte_full = construir_reporte_pl(pf, ff)
 
 st.caption(f"📋 {len(reporte_full):,} registros en total")
-st.download_button("📥 Descargar todos los meses", exportar_csv(reporte_full), "reporte_todos.csv", mime="text/csv", key="dl_todos")
+csv_full = reporte_full.write_csv().encode("utf-8")
+st.download_button("📥 Descargar todos los meses", csv_full, "reporte_todos.csv", mime="text/csv", key="dl_todos")
+del reporte_full, pf, ff, csv_full; gc.collect()
