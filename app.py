@@ -353,13 +353,11 @@ if archivos:
                     height=altura_tabla(tabla_preview)
                 )
 
-               st.download_button(
-                    st.download_button(
+             st.download_button(
                     "📥 Descargar comparación de comisiones",
                     exportar_csv(tabla),
                     "comisiones.csv"
                 )
-
                 # ================= DASHBOARD COMPARACION =================
 
                 st.subheader(
