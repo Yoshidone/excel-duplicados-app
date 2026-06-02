@@ -1,7 +1,7 @@
-streamlit
-pandas
-polars
-openpyxl
-pyarrow
-xlsxwriter
-python-calamine
+streamlit==1.45.1
+pandas==2.2.3
+polars==1.30.0
+openpyxl==3.1.5
+pyarrow==20.0.0
+xlsxwriter==3.2.3
+python-calamine==0.3.0
