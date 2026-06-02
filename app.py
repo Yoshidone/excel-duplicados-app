@@ -3,6 +3,7 @@ import pandas as pd
 import polars as pl
 import zipfile
 import io
+import gc
 
 st.set_page_config(
     page_title="Analizador Financiero Payin",
