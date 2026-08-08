@@ -215,6 +215,16 @@ def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFram
         pl.col("NETO"),
         get_col(detalle, "set_referencia").alias("SET_referencia"),
         get_col(detalle, "fecha transferencia").alias("Fecha_Transferencia"),
+        get_col(detalle, "invoice_public_id").alias("invoice_public_id"),
+        (
+            pl.col("deuda_extern_id")
+            if "deuda_extern_id" in detalle.columns
+            else (
+                pl.col("deuda_externa_id")
+                if "deuda_externa_id" in detalle.columns
+                else pl.lit("")
+            )
+        ).alias("Deuda_extern_id"),
     ])
 
 
@@ -252,6 +262,7 @@ with st.spinner("⚙️ Normalizando datos..."):
         "x_create_date_gmt_peru","fecha","mes",
         "com_nombre","deb_nombre","tipo","set_referencia",
         "fecha transferencia",
+        "invoice_public_id","deuda_extern_id","deuda_externa_id",
     ] if c in df_base.columns]
     df_base = df_base.select(cols_utiles)
     gc.collect()
