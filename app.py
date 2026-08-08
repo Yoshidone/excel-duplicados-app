@@ -161,18 +161,40 @@ def normalizar_base(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFrame:
-    """Merge pagos + fees en Polars y devuelve el reporte estructurado."""
+    """Merge pagos + fees y devuelve el reporte detallado con NETO y control de PSP duplicados."""
 
     pagos = pagos.rename({"tx_amount": "RECAUDO", "tx_reference": "PY_operation_no"})
-    fees  = fees.rename( {"tx_amount": "COMISION","tx_reference": "SF_operation_no"})
+    fees  = fees.rename({"tx_amount": "COMISION", "tx_reference": "SF_operation_no"})
 
     fees_sel = fees.select(["psp_tin", "COMISION", "SF_operation_no"])
 
     detalle = pagos.join(fees_sel, on="psp_tin", how="left")
 
+    # Contar cuántas veces aparece cada PSP dentro del reporte.
+    # Si aparece más de una vez, se marca como DUPLICADO.
+    conteo_psp = (
+        detalle
+        .group_by("psp_tin")
+        .agg(pl.len().alias("_cantidad_psp"))
+    )
+
+    detalle = detalle.join(conteo_psp, on="psp_tin", how="left")
+
     # Columnas opcionales — si no existen se crean vacías
     def get_col(df, col):
         return pl.col(col) if col in df.columns else pl.lit("").alias(col)
+
+    detalle = detalle.with_columns([
+        pl.col("RECAUDO").cast(pl.Float64).fill_null(0).alias("RECAUDO"),
+        pl.col("COMISION").cast(pl.Float64).abs().fill_null(0).alias("COMISION"),
+    ])
+
+    # NETO = RECAUDO - COMISION
+    detalle = detalle.with_columns(
+        (pl.col("RECAUDO") - pl.col("COMISION"))
+        .round(2)
+        .alias("NETO")
+    )
 
     return detalle.select([
         get_col(detalle, "x_create_date_gmt_peru").alias("FECHA"),
@@ -180,11 +202,17 @@ def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFram
         get_col(detalle, "tx_currency_code").alias("MONEDA"),
         get_col(detalle, "deb_nombre").alias("CLIENTE"),
         pl.col("psp_tin"),
+        pl.when(pl.col("_cantidad_psp") > 1)
+          .then(pl.lit("DUPLICADO"))
+          .otherwise(pl.lit("OK"))
+          .alias("ESTADO_PSP"),
+        pl.col("_cantidad_psp").alias("CANTIDAD_PSP"),
         get_col(detalle, "tipo").alias("tipo"),
         pl.col("PY_operation_no"),
         pl.col("SF_operation_no"),
-        pl.col("RECAUDO").cast(pl.Float64).fill_null(0),
-        pl.col("COMISION").cast(pl.Float64).abs().fill_null(0),
+        pl.col("RECAUDO"),
+        pl.col("COMISION"),
+        pl.col("NETO"),
         get_col(detalle, "set_referencia").alias("SET_referencia"),
         get_col(detalle, "fecha transferencia").alias("Fecha_Transferencia"),
     ])
@@ -356,6 +384,40 @@ if opcion in ["Reporte detallado", "Ambas"]:
             st.info(f"ℹ️ Mostrando 500 de {len(reporte_pl):,} filas.")
         st.dataframe(reporte_preview, use_container_width=True, hide_index=True, height=altura_tabla(len(reporte_preview)))
 
+        # ─────────────────────────────────────────────────────────────────────
+        # CONTROL DE PSP DUPLICADOS
+        # ─────────────────────────────────────────────────────────────────────
+        duplicados_psp = (
+            reporte_pl
+            .filter(pl.col("ESTADO_PSP") == "DUPLICADO")
+            .select(["psp_tin", "CANTIDAD_PSP"])
+            .unique()
+            .sort("CANTIDAD_PSP", descending=True)
+        )
+
+        if len(duplicados_psp) > 0:
+            st.warning(
+                f"⚠️ Se encontraron {len(duplicados_psp):,} PSP duplicados "
+                f"en el reporte detallado."
+            )
+            st.dataframe(
+                duplicados_psp.head(500).to_pandas(),
+                use_container_width=True,
+                hide_index=True,
+                height=altura_tabla(min(len(duplicados_psp), 500))
+            )
+            csv_dup = duplicados_psp.write_csv().encode("utf-8")
+            st.download_button(
+                "📥 Descargar PSP duplicados",
+                csv_dup,
+                "psp_duplicados.csv",
+                mime="text/csv",
+                key="dl_dup_psp"
+            )
+            del csv_dup
+        else:
+            st.success("✅ No se encontraron PSP duplicados en el reporte detallado.")
+
         csv_rep = reporte_pl.write_csv().encode("utf-8")
         st.download_button("📥 Descargar reporte mes CSV", csv_rep, "reporte_mes.csv", mime="text/csv", key="dl_rep_mes")
         del reporte_preview; gc.collect()
@@ -367,8 +429,9 @@ if opcion in ["Reporte detallado", "Ambas"]:
         dtr  = round(reporte_pl["RECAUDO"].sum(),  2)
         dtc  = round(reporte_pl["COMISION"].sum(), 2)
         dops = reporte_pl["psp_tin"].n_unique()
-        dnet = round(dtr - dtc, 2)
+        dnet = round(reporte_pl["NETO"].sum(), 2)
         dtkt = round(dtr / dops, 2) if dops > 0 else 0
+        ddup = reporte_pl.filter(pl.col("ESTADO_PSP") == "DUPLICADO")["psp_tin"].n_unique()
 
         da1, da2, da3, da4 = st.columns(4)
         da1.metric("💰 Recaudo total",   f"{simbolo} {dtr:,.2f}")
@@ -378,7 +441,8 @@ if opcion in ["Reporte detallado", "Ambas"]:
 
         da5, da6, da7, da8 = st.columns(4)
         da5.metric("🧮 Neto", f"{simbolo} {dnet:,.2f}")
-        da6.metric("", ""); da7.metric("", ""); da8.metric("", "")
+        da6.metric("⚠️ PSP duplicados", f"{ddup:,}")
+        da7.metric("", ""); da8.metric("", "")
 
         # Comisiones por comercio
         st.divider()
@@ -406,6 +470,22 @@ ff = df_base.filter(pl.col("tx_reference").str.starts_with("SF"))
 reporte_full = construir_reporte_pl(pf, ff)
 
 st.caption(f"📋 {len(reporte_full):,} registros en total")
+
+duplicados_full = (
+    reporte_full
+    .filter(pl.col("ESTADO_PSP") == "DUPLICADO")
+    .select(["psp_tin", "CANTIDAD_PSP"])
+    .unique()
+    .sort("CANTIDAD_PSP", descending=True)
+)
+
+if len(duplicados_full) > 0:
+    st.warning(
+        f"⚠️ En todos los meses se encontraron {len(duplicados_full):,} PSP duplicados."
+    )
+else:
+    st.success("✅ No se encontraron PSP duplicados en todos los meses.")
+
 csv_full = reporte_full.write_csv().encode("utf-8")
 st.download_button("📥 Descargar todos los meses", csv_full, "reporte_todos.csv", mime="text/csv", key="dl_todos")
 del reporte_full, pf, ff, csv_full; gc.collect()
