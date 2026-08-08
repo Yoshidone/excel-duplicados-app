@@ -206,7 +206,6 @@ def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFram
           .then(pl.lit("DUPLICADO"))
           .otherwise(pl.lit("OK"))
           .alias("ESTADO_PSP"),
-        pl.col("_cantidad_psp").alias("CANTIDAD_PSP"),
         get_col(detalle, "tipo").alias("tipo"),
         pl.col("PY_operation_no"),
         pl.col("SF_operation_no"),
@@ -217,14 +216,18 @@ def construir_reporte_pl(pagos: pl.DataFrame, fees: pl.DataFrame) -> pl.DataFram
         get_col(detalle, "fecha transferencia").alias("Fecha_Transferencia"),
         get_col(detalle, "invoice_public_id").alias("invoice_public_id"),
         (
-            pl.col("deuda_extern_id")
-            if "deuda_extern_id" in detalle.columns
+            pl.col("deuda_external_id")
+            if "deuda_external_id" in detalle.columns
             else (
-                pl.col("deuda_externa_id")
-                if "deuda_externa_id" in detalle.columns
-                else pl.lit("")
+                pl.col("deuda_extern_id")
+                if "deuda_extern_id" in detalle.columns
+                else (
+                    pl.col("deuda_externa_id")
+                    if "deuda_externa_id" in detalle.columns
+                    else pl.lit("")
+                )
             )
-        ).alias("Deuda_extern_id"),
+        ).alias("Deuda_external_id"),
     ])
 
 
@@ -262,7 +265,7 @@ with st.spinner("⚙️ Normalizando datos..."):
         "x_create_date_gmt_peru","fecha","mes",
         "com_nombre","deb_nombre","tipo","set_referencia",
         "fecha transferencia",
-        "invoice_public_id","deuda_extern_id","deuda_externa_id",
+        "invoice_public_id","deuda_external_id","deuda_extern_id","deuda_externa_id",
     ] if c in df_base.columns]
     df_base = df_base.select(cols_utiles)
     gc.collect()
@@ -401,9 +404,8 @@ if opcion in ["Reporte detallado", "Ambas"]:
         duplicados_psp = (
             reporte_pl
             .filter(pl.col("ESTADO_PSP") == "DUPLICADO")
-            .select(["psp_tin", "CANTIDAD_PSP"])
+            .select(["psp_tin"])
             .unique()
-            .sort("CANTIDAD_PSP", descending=True)
         )
 
         if len(duplicados_psp) > 0:
@@ -485,9 +487,8 @@ st.caption(f"📋 {len(reporte_full):,} registros en total")
 duplicados_full = (
     reporte_full
     .filter(pl.col("ESTADO_PSP") == "DUPLICADO")
-    .select(["psp_tin", "CANTIDAD_PSP"])
+    .select(["psp_tin"])
     .unique()
-    .sort("CANTIDAD_PSP", descending=True)
 )
 
 if len(duplicados_full) > 0:
